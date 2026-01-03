@@ -1,12 +1,15 @@
 """Authentication middleware."""
+from datetime import datetime
+
 from fastapi import HTTPException, status, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
-from datetime import datetime
 
 from app.database import get_db
 from app.models.session import Session as SessionModel
 from app.models.user import User
+from app.repositories.session_repository import SessionRepository
+from app.repositories.user_repository import UserRepository
 
 
 security = HTTPBearer()
@@ -24,8 +27,9 @@ async def get_current_user(
     """
     token = credentials.credentials
     
-    # Find session
-    session = db.query(SessionModel).filter(SessionModel.token == token).first()
+    # Find session using repository
+    session_repository = SessionRepository(db)
+    session = session_repository.get_by_token(token)
     
     if not session:
         raise HTTPException(
@@ -35,15 +39,15 @@ async def get_current_user(
     
     # Check if expired
     if session.is_expired():
-        db.delete(session)
-        db.commit()
+        session_repository.delete_by_token(token)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Session expired"
         )
     
-    # Get user
-    user = db.query(User).filter(User.id == session.user_id).first()
+    # Get user using repository
+    user_repository = UserRepository(db)
+    user = user_repository.get_by_id(session.user_id)
     
     if not user:
         raise HTTPException(
@@ -51,9 +55,8 @@ async def get_current_user(
             detail="User not found"
         )
     
-    # Update last login
-    user.last_login = datetime.utcnow()
-    db.commit()
+    # Update last login using repository
+    user_repository.update_last_login(user.id)
     
     return user
 

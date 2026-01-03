@@ -1,17 +1,20 @@
 """Job service for business logic."""
 import uuid
 from typing import List, Dict
+
 from sqlalchemy.orm import Session
 
-from app.repositories.job_repository import JobRepository
-from app.services.job_logger import JobLogger
-from app.services.queue import QueueInterface
-from app.services.output_formatter import create_zip_archive
-from app.tasks import generate_content_task
-from app.database import Job
 from app.config import settings
+from app.constants import ESTIMATED_TIME_PER_KEYWORD_PER_WEBSITE_SECONDS
+from app.database import Job
 from app.exceptions import JobNotFoundError, JobAccessDeniedError, JobInvalidStateError
+from app.repositories.job_repository import JobRepository
 from app.schemas import GenerateRequest, JobStatusResponse, JobResponse
+from app.services.file_storage import FileStorageService
+from app.services.job_logger import JobLogger
+from app.services.output_formatter import create_zip_archive
+from app.services.queue import QueueInterface
+from app.tasks import generate_content_task
 
 
 class JobService:
@@ -37,6 +40,7 @@ class JobService:
         self.queue = queue
         self.job_repository = job_repository or JobRepository(db)
         self.job_logger = job_logger or JobLogger(db)
+        self.file_storage = FileStorageService()
     
     def create_job(
         self,
@@ -123,8 +127,8 @@ class JobService:
             job_timeout=settings.task_timeout
         )
         
-        # Estimate time (rough estimate: 5 seconds per keyword per website)
-        estimated_time = len(job.keywords) * request.num_websites * 5
+        # Estimate time (rough estimate: configured seconds per keyword per website)
+        estimated_time = len(job.keywords) * request.num_websites * ESTIMATED_TIME_PER_KEYWORD_PER_WEBSITE_SECONDS
         
         return {
             "status": "queued",
@@ -181,64 +185,43 @@ class JobService:
             limit: Maximum number of jobs to return
             
         Returns:
-            List of job responses (NOT logs!)
+            List of job responses
         """
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.info(f"🔍 JobService.list_jobs called: user_id={user_id}, limit={limit}")
+        from app.utils.logger import get_logger
+        logger = get_logger(__name__)
         
-        # Get jobs from repository (NOT logs!)
         jobs = self.job_repository.get_by_user(user_id, limit)
-        logger.info(f"📊 Found {len(jobs)} jobs from JobRepository (NOT JobLog!)")
         
         if len(jobs) == 0:
-            logger.warning(f"⚠️ No jobs found for user_id={user_id}")
             return []
         
         result = []
         for job in jobs:
-            # CRITICAL: Verify this is a Job object, NOT a JobLog object
             if not isinstance(job, Job):
-                logger.error(f"❌ CRITICAL ERROR: Expected Job object, got {type(job)}. This should never happen!")
-                raise TypeError(f"Expected Job object, got {type(job)}. This indicates a bug in JobRepository.")
+                logger.error(f"Expected Job object, got {type(job)}")
+                raise TypeError(f"Expected Job object, got {type(job)}")
             
-            # Verify this is a Job, not a JobLog (additional check)
             if not hasattr(job, 'id') or not hasattr(job, 'status'):
-                logger.error(f"❌ Invalid job object: {type(job)}")
+                logger.warning(f"Invalid job object: {type(job)}")
                 continue
             
-            # Ensure we have the required Job attributes (not JobLog attributes)
-            if not hasattr(job, 'user_id') or not hasattr(job, 'created_at'):
-                logger.error(f"❌ Job object missing required attributes: {type(job)}")
-                continue
-                
-            # Refresh job to get latest updates
             try:
                 job = self.job_repository.refresh_job(job)
             except Exception as e:
-                logger.error(f"⚠️ Error refreshing job {job.id}: {e}")
+                logger.error(f"Error refreshing job {job.id}: {e}", exc_info=True)
                 continue
             
             try:
                 job_response = JobResponse.from_orm(job)
-                # Verify the response is a JobResponse
                 if not isinstance(job_response, JobResponse):
-                    logger.error(f"❌ CRITICAL: JobResponse.from_orm returned {type(job_response)}, not JobResponse")
+                    logger.error(f"JobResponse.from_orm returned {type(job_response)}")
                     raise TypeError(f"Expected JobResponse, got {type(job_response)}")
                 result.append(job_response)
-                logger.debug(f"✅ Added job {job.id} (status={job.status}) to result")
             except Exception as e:
-                logger.error(f"❌ Error converting job {job.id} to JobResponse: {e}")
-                import traceback
-                traceback.print_exc()
+                logger.error(f"Error converting job {job.id} to JobResponse: {e}", exc_info=True)
                 continue
         
-        # Final verification: ensure we're returning a list of JobResponse
-        if not isinstance(result, list):
-            logger.error(f"❌ CRITICAL: Expected list, got {type(result)}")
-            raise TypeError(f"Expected list of JobResponse, got {type(result)}")
-        
-        logger.info(f"📦 Returning {len(result)} JobResponse objects (NOT logs!) - verified type: {type(result[0]) if result else 'empty list'}")
+        logger.debug(f"Returning {len(result)} jobs for user {user_id}")
         return result
     
     def cancel_job(
@@ -275,6 +258,36 @@ class JobService:
         job.error_message = "Cancelled by user"
         self.job_repository.update(job)
     
+    def _read_website_files(self, job_id: str, job) -> Dict[int, str]:
+        """
+        Read website files from filesystem or legacy format.
+        
+        Args:
+            job_id: Job identifier
+            job: Job instance
+            
+        Returns:
+            Dictionary mapping website index to file content
+            
+        Raises:
+            ValueError: If files cannot be read
+        """
+        try:
+            return self.file_storage.get_all_website_files(
+                job_id=job_id,
+                lang=job.lang,
+                geo=job.geo
+            )
+        except Exception as e:
+            # Fallback: check for legacy format
+            if job.output_files and isinstance(job.output_files, dict):
+                first_value = next(iter(job.output_files.values()), None)
+                if first_value and isinstance(first_value, str) and len(first_value) > 100:
+                    return job.output_files
+            raise ValueError(
+                f"Output files not found for job {job_id}: {str(e)}"
+            )
+    
     def download_results(
         self,
         job_id: str,
@@ -304,11 +317,10 @@ class JobService:
                 operation="download"
             )
         
-        if not job.output_files:
-            raise ValueError(
-                "Output files not found. Job may have been completed before file storage was implemented."
-            )
+        website_files = self._read_website_files(job_id, job)
         
-        # Create ZIP archive
-        return create_zip_archive(job.output_files, job.lang, job.geo)
+        if not website_files:
+            raise ValueError(f"No output files found for job {job_id}")
+        
+        return create_zip_archive(website_files, job.lang, job.geo)
 

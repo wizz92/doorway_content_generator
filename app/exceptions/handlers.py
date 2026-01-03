@@ -5,6 +5,10 @@ from fastapi.exceptions import RequestValidationError
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.exceptions.base import AppException
+from app.utils.logger import get_logger
+from app.utils.responses import error_response
+
+logger = get_logger(__name__)
 
 
 async def app_exception_handler(request: Request, exc: AppException) -> JSONResponse:
@@ -18,12 +22,26 @@ async def app_exception_handler(request: Request, exc: AppException) -> JSONResp
     Returns:
         JSON error response
     """
+    # Extract context from request
+    user_id = getattr(request.state, 'user_id', None)
+    job_id = getattr(request.state, 'job_id', None)
+    
+    # Log with context
+    logger.error(
+        f"Application exception: {exc.detail}",
+        extra={
+            "user_id": user_id,
+            "job_id": job_id,
+            "endpoint": request.url.path,
+            "method": request.method,
+            "status_code": exc.status_code
+        },
+        exc_info=True
+    )
+    
     return JSONResponse(
         status_code=exc.status_code,
-        content={
-            "detail": exc.detail,
-            "message": exc.message,
-        }
+        content=error_response(error=exc.detail, message=exc.message)
     )
 
 
@@ -41,12 +59,23 @@ async def validation_exception_handler(
     Returns:
         JSON error response
     """
+    user_id = getattr(request.state, 'user_id', None)
+    
+    logger.warning(
+        f"Validation error: {exc.errors()}",
+        extra={
+            "user_id": user_id,
+            "endpoint": request.url.path,
+            "method": request.method
+        }
+    )
+    
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-        content={
-            "detail": exc.errors(),
-            "message": "Validation error"
-        }
+        content=error_response(
+            error="Validation error",
+            message="Invalid request data"
+        )
     )
 
 
@@ -64,12 +93,28 @@ async def database_exception_handler(
     Returns:
         JSON error response
     """
+    user_id = getattr(request.state, 'user_id', None)
+    job_id = getattr(request.state, 'job_id', None)
+    
+    # Log full error details server-side
+    logger.error(
+        f"Database error: {str(exc)}",
+        extra={
+            "user_id": user_id,
+            "job_id": job_id,
+            "endpoint": request.url.path,
+            "method": request.method
+        },
+        exc_info=True
+    )
+    
+    # Return sanitized error to client
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        content={
-            "detail": "Database error occurred",
-            "message": "An internal error occurred"
-        }
+        content=error_response(
+            error="Database error occurred",
+            message="An internal error occurred"
+        )
     )
 
 
@@ -84,11 +129,28 @@ async def generic_exception_handler(request: Request, exc: Exception) -> JSONRes
     Returns:
         JSON error response
     """
+    user_id = getattr(request.state, 'user_id', None)
+    job_id = getattr(request.state, 'job_id', None)
+    
+    # Log full error details server-side
+    logger.error(
+        f"Unexpected error: {str(exc)}",
+        extra={
+            "user_id": user_id,
+            "job_id": job_id,
+            "endpoint": request.url.path,
+            "method": request.method,
+            "exception_type": type(exc).__name__
+        },
+        exc_info=True
+    )
+    
+    # Return sanitized error to client
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        content={
-            "detail": "An unexpected error occurred",
-            "message": str(exc)
-        }
+        content=error_response(
+            error="An unexpected error occurred",
+            message="An internal error occurred"
+        )
     )
 

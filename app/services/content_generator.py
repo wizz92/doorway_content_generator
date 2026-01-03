@@ -2,6 +2,9 @@
 from typing import List, Dict
 from app.services.openrouter_client import OpenRouterClient
 from app.config import settings
+from app.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 class ContentGenerator:
@@ -71,7 +74,7 @@ class ContentGenerator:
                     results[website_index][keyword] = content
                 except Exception as e:
                     # Log error but continue with other keywords
-                    print(f"Error generating content for keyword '{keyword}' on website {website_index}: {e}")
+                    logger.error(f"Error generating content for keyword '{keyword}' on website {website_index}: {e}", exc_info=True)
                     results[website_index][keyword] = f"<p>Error generating content: {str(e)}</p>"
         
         return results

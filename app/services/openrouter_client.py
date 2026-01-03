@@ -1,65 +1,30 @@
 """OpenRouter API client."""
-import os
 import time
-import random
 import requests
-from typing import List, Optional
+from typing import Optional
+
 from app.config import settings
+from app.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 class OpenRouterClient:
     """Client for OpenRouter API."""
     
-    def __init__(self, api_key: Optional[str] = None):
+    def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None, api_url: Optional[str] = None):
+        """
+        Initialize OpenRouter client.
+        
+        Args:
+            api_key: Optional API key (uses config default if not provided)
+            model: Optional model name (uses config default if not provided)
+            api_url: Optional API base URL (uses config default if not provided)
+        """
         self.api_key = api_key or settings.openrouter_api_key
-        self.base_url = "https://openrouter.ai/api/v1"
+        self.model = model or settings.openrouter_model
+        self.base_url = api_url or settings.openrouter_api_url
         self.request_delay = settings.request_delay_seconds
-        self.models: List[str] = []
-        
-    def get_available_models(self) -> List[str]:
-        """Fetch available models from OpenRouter."""
-        if self.models:
-            return self.models
-            
-        url = f"{self.base_url}/models"
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-        }
-        
-        try:
-            resp = requests.get(url, headers=headers, timeout=30)
-            resp.raise_for_status()
-            data = resp.json()
-            
-            model_ids = []
-            for item in data.get("data", []):
-                model_id = item.get("id")
-                if not model_id:
-                    continue
-                
-                lower_id = model_id.lower()
-                # Filter out image/vision/audio models
-                if any(bad in lower_id for bad in ["image", "vision", "speech", "audio"]):
-                    continue
-                
-                model_ids.append(model_id)
-            
-            if model_ids:
-                self.models = model_ids
-            else:
-                # Fallback to default model
-                self.models = ["google/gemini-2.5-flash-lite"]
-                
-        except Exception as e:
-            # Fallback to default model on error
-            self.models = ["google/gemini-2.5-flash-lite"]
-        
-        return self.models
-    
-    def choose_random_model(self) -> str:
-        """Choose a random model from available models."""
-        models = self.get_available_models()
-        return random.choice(models)
     
     def generate_content(
         self,
@@ -78,7 +43,7 @@ class OpenRouterClient:
             lang: Language code (e.g., "hu", "en")
             geo: Geography code (e.g., "HU", "US")
             website_index: Index of website (for variation)
-            model: Model to use (optional, random if not provided)
+            model: Model to use (optional, uses configured model if not provided)
             max_retries: Maximum number of retry attempts
             
         Returns:
@@ -87,16 +52,13 @@ class OpenRouterClient:
         Raises:
             Exception: If content generation fails after retries
         """
-        if not model:
-            model = self.choose_random_model()
+        model_to_use = model or self.model
         
         url = f"{self.base_url}/chat/completions"
         
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
-            "HTTP-Referer": "https://doorway-content-generator.local",
-            "X-Title": "doorway_content_generator",
         }
         
         system_prompt = (
@@ -129,12 +91,14 @@ class OpenRouterClient:
         )
         
         payload = {
-            "model": model,
+            "model": model_to_use,
             "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
         }
+        
+        logger.debug(f"Generating content for keyword '{keyword}' using model '{model_to_use}'")
         
         # Retry logic
         last_error = None
@@ -146,15 +110,15 @@ class OpenRouterClient:
                 
                 # Validate response structure
                 if "choices" not in data or not data["choices"]:
-                    raise Exception("Invalid response: no choices in response")
+                    raise ValueError("Invalid response: no choices in response")
                 
                 if "message" not in data["choices"][0] or "content" not in data["choices"][0]["message"]:
-                    raise Exception("Invalid response: no content in message")
+                    raise ValueError("Invalid response: no content in message")
                 
                 content = data["choices"][0]["message"]["content"]
                 
                 if not content or not content.strip():
-                    raise Exception("Empty content received from API")
+                    raise ValueError("Empty content received from API")
                 
                 # Remove line breaks from content
                 import re
@@ -163,41 +127,50 @@ class OpenRouterClient:
                 # Add delay to respect rate limits
                 time.sleep(self.request_delay)
                 
+                logger.debug(f"Successfully generated content for keyword '{keyword}'")
                 return content
                 
             except requests.exceptions.Timeout:
                 last_error = f"Request timeout (attempt {attempt + 1}/{max_retries})"
+                logger.warning(f"Request timeout for keyword '{keyword}': {last_error}")
                 if attempt < max_retries - 1:
                     time.sleep(2 ** attempt)  # Exponential backoff
                     continue
             except requests.exceptions.HTTPError as e:
                 if e.response and e.response.status_code == 429:  # Rate limit
                     last_error = f"Rate limit exceeded (attempt {attempt + 1}/{max_retries})"
+                    logger.warning(f"Rate limit for keyword '{keyword}': {last_error}")
                     if attempt < max_retries - 1:
                         wait_time = (2 ** attempt) * 5  # Longer wait for rate limits
                         time.sleep(wait_time)
                         continue
                 else:
                     last_error = f"HTTP error {e.response.status_code if e.response else 'unknown'}: {str(e)}"
+                    logger.error(f"HTTP error for keyword '{keyword}': {last_error}")
                     if attempt < max_retries - 1:
                         time.sleep(2 ** attempt)
                         continue
             except requests.exceptions.RequestException as e:
                 last_error = f"Request error: {str(e)}"
+                logger.error(f"Request error for keyword '{keyword}': {last_error}", exc_info=True)
                 if attempt < max_retries - 1:
                     time.sleep(2 ** attempt)
                     continue
-            except (KeyError, IndexError) as e:
+            except (KeyError, IndexError, ValueError) as e:
                 last_error = f"Unexpected response format: {str(e)}"
+                logger.error(f"Response format error for keyword '{keyword}': {last_error}", exc_info=True)
                 # Don't retry on format errors
                 break
             except Exception as e:
                 last_error = f"Unexpected error: {str(e)}"
+                logger.error(f"Unexpected error for keyword '{keyword}': {last_error}", exc_info=True)
                 if attempt < max_retries - 1:
                     time.sleep(2 ** attempt)
                     continue
         
-        raise Exception(f"Failed to generate content after {max_retries} attempts. Last error: {last_error}")
+        error_msg = f"Failed to generate content after {max_retries} attempts. Last error: {last_error}"
+        logger.error(f"Content generation failed for keyword '{keyword}': {error_msg}")
+        raise Exception(error_msg)
     
     def _get_variation_instruction(self, website_index: int) -> str:
         """Get variation instruction based on website index."""

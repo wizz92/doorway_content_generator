@@ -12,6 +12,7 @@ import {
 } from '@mui/material';
 import { useAuth } from '../../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import { logger } from '../../utils/logger';
 
 export const LoginForm: React.FC = () => {
   const [username, setUsername] = useState('');
@@ -30,9 +31,9 @@ export const LoginForm: React.FC = () => {
     try {
       await login(username, password);
       navigate('/dashboard');
-    } catch (err: any) {
-      console.error('Login form error:', err);
-      const errorMessage = err.message || err.response?.data?.detail || 'Login failed. Please check your credentials.';
+    } catch (err: unknown) {
+      logger.error('Login form error:', err);
+      const errorMessage = (err as Error).message || (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'Login failed. Please check your credentials.';
       setError(errorMessage);
     } finally {
       setLoading(false);

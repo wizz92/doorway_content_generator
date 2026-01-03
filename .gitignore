@@ -52,6 +52,7 @@ frontend.log
 # Generated files
 articles/
 output/
+outputs/
 *.zip
 
 # OS

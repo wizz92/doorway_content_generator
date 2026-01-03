@@ -1,5 +1,6 @@
 import api from './api';
 import { normalizeJobs } from '../utils/jobUtils';
+import { logger } from '../utils/logger';
 import { 
   Job, 
   JobStatus, 
@@ -26,26 +27,27 @@ export const jobsService = {
   async uploadFile(file: File): Promise<UploadResponse> {
     const formData = new FormData();
     formData.append('file', file);
-    const response = await api.post<UploadResponse>('/api/upload', formData, {
+    const response = await api.post<{ data: UploadResponse; error: null; message: string }>('/upload', formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
     });
-    return response.data;
+    // Unwrap the standardized response format
+    return response.data.data;
   },
 
   async generateContent(request: GenerateRequest): Promise<{ status: string; estimated_time: number; job_id: string }> {
-    const response = await api.post('/api/generate', request);
+    const response = await api.post('/generate', request);
     return response.data;
   },
 
   async getJobStatus(jobId: string): Promise<JobStatusResponse> {
-    const response = await api.get<JobStatusResponse>(`/api/job/${jobId}/status`);
+    const response = await api.get<JobStatusResponse>(`/job/${jobId}/status`);
     return response.data;
   },
 
   async downloadJob(jobId: string): Promise<Blob> {
-    const response = await api.get(`/api/job/${jobId}/download`, {
+    const response = await api.get(`/job/${jobId}/download`, {
       responseType: 'blob',
     });
     return response.data;
@@ -53,10 +55,9 @@ export const jobsService = {
 
   async listJobs(limit: number = 20): Promise<Job[]> {
     try {
-      console.log('📞 Calling /api/jobs with limit:', limit);
-      // Add cache-busting timestamp to prevent browser/proxy caching
+      logger.debug('Calling /jobs with limit:', limit);
       const timestamp = new Date().getTime();
-      const response = await api.get(`/api/jobs?limit=${limit}&_t=${timestamp}`, {
+      const response = await api.get(`/jobs?limit=${limit}&_t=${timestamp}`, {
         headers: {
           'Cache-Control': 'no-cache, no-store, must-revalidate',
           'Pragma': 'no-cache',
@@ -64,56 +65,36 @@ export const jobsService = {
       });
       const data = response.data;
       
-      console.log('📥 API response:', {
-        status: response.status,
-        data: data,
-        isArray: Array.isArray(data),
-        length: Array.isArray(data) ? data.length : 'N/A',
-      });
+      logger.debug('API response received', { status: response.status });
       
-      // Handle response with "jobs" key (NOT "logs")
       if (data && typeof data === 'object') {
-        // CRITICAL: Check for "logs" key - this should NOT happen from /api/jobs
         if (Array.isArray(data.logs)) {
-          console.error('❌ ERROR: Response has "logs" key instead of "jobs"! This is wrong!');
-          console.error('   This suggests the wrong endpoint (/api/logs/jobs) is being called');
-          console.error('   Response keys:', Object.keys(data));
-          // Don't return logs - return empty array instead
+          logger.error('Response has "logs" key instead of "jobs"');
           return [];
         }
         
-        // Correct response: "jobs" key
         if (Array.isArray(data.jobs)) {
-          const normalized = normalizeJobs(data.jobs);
-          console.log('✅ Normalized jobs from data.jobs:', normalized.length, normalized);
-          return normalized;
+          return normalizeJobs(data.jobs);
         }
-        // Fallback: if response is directly an array
+        
         if (Array.isArray(data)) {
-          const normalized = normalizeJobs(data);
-          console.log('✅ Normalized jobs from array:', normalized.length, normalized);
-          return normalized;
+          return normalizeJobs(data);
         }
-        // Legacy support for "data" key
+        
         if (Array.isArray(data.data)) {
           return normalizeJobs(data.data);
         }
       }
       
-      console.warn('⚠️ Unexpected response format:', data);
+      logger.warn('Unexpected response format:', data);
       return [];
-    } catch (error: any) {
-      console.error('❌ Error in listJobs:', error);
-      console.error('Error details:', {
-        message: error.message,
-        response: error.response?.data,
-        status: error.response?.status,
-      });
+    } catch (error: unknown) {
+      logger.error('Error in listJobs:', error);
       throw error;
     }
   },
 
   async cancelJob(jobId: string): Promise<void> {
-    await api.delete(`/api/job/${jobId}`);
+    await api.delete(`/job/${jobId}`);
   },
 };

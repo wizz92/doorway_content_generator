@@ -5,6 +5,9 @@ from sqlalchemy.orm import Session
 
 from app.models.log import JobLog
 from app.config import settings
+from app.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 class JobLogger:
@@ -52,7 +55,7 @@ class JobLogger:
             self.db.add(job_log)
             self.db.commit()
         except Exception as e:
-            print(f"Error logging job event: {e}")
+            logger.error(f"Error logging job event: {e}", exc_info=True)
             # Don't raise - logging failures shouldn't break the application
     
     def log_created(self, job_id: str, user_id: int, keywords_count: int) -> None:

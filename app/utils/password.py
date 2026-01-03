@@ -1,5 +1,8 @@
 """Password hashing utilities."""
 import bcrypt
+from app.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 def hash_password(password: str) -> str:
@@ -14,6 +17,6 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     try:
         return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
     except Exception as e:
-        print(f"Password verification error: {e}")
+        logger.error(f"Password verification error: {e}", exc_info=True)
         return False
 

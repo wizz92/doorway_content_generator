@@ -8,7 +8,11 @@ from app.services.content_generator import ContentGenerator
 from app.services.output_formatter import create_website_file
 from app.services.progress_tracker import ProgressTracker
 from app.services.job_logger import JobLogger
+from app.services.file_storage import FileStorageService
 from app.config import settings
+from app.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 def generate_content_task(
@@ -17,7 +21,7 @@ def generate_content_task(
     lang: str,
     geo: str,
     num_websites: int
-):
+) -> None:
     """
     Background task to generate content for all keywords and websites.
     
@@ -28,11 +32,14 @@ def generate_content_task(
         geo: Geography code
         num_websites: Number of websites
     """
+    logger.info(f"Starting background task for job_id={job_id}, keywords_count={len(keywords)}, lang={lang}, geo={geo}, num_websites={num_websites}")
+    
     db = SessionLocal()
     job_repository = JobRepository(db)
     progress_tracker = ProgressTracker(db, job_repository)
     job_logger = JobLogger(db)
     generator = ContentGenerator()
+    file_storage = FileStorageService()
     
     job = None
     
@@ -40,6 +47,7 @@ def generate_content_task(
         # Get job and update status
         job = job_repository.get_by_id(job_id)
         if not job:
+            logger.error(f"Job {job_id} not found in database")
             return
         
         job.status = "processing"
@@ -51,7 +59,7 @@ def generate_content_task(
         
         total_tasks = num_websites * len(keywords)
         completed_tasks = 0
-        website_files = {}
+        website_file_paths = {}
         
         # Generate content for each website
         for website_index in range(1, num_websites + 1):
@@ -80,16 +88,26 @@ def generate_content_task(
                     
                 except Exception as e:
                     error_msg = f"Error generating content for keyword '{keyword}': {str(e)}"
-                    print(error_msg)
+                    logger.error(error_msg, exc_info=True)
                     keyword_content_map[keyword] = f"<p>Error: {str(e)}</p>"
             
-            # Create website file
-            website_files[website_index] = create_website_file(
+            # Create website file content
+            file_content = create_website_file(
                 website_index=website_index,
                 lang=lang,
                 geo=geo,
                 keyword_content_map=keyword_content_map
             )
+            
+            # Save file to filesystem
+            file_path = file_storage.save_website_file(
+                job_id=job_id,
+                website_index=website_index,
+                lang=lang,
+                geo=geo,
+                content=file_content
+            )
+            website_file_paths[website_index] = file_path
             
             # Update websites completed
             job = job_repository.get_by_id(job_id)
@@ -104,7 +122,8 @@ def generate_content_task(
             job.progress = 100
             job.websites_completed = num_websites
             job.keywords_completed = completed_tasks
-            job.output_files = website_files
+            # Store file paths instead of file contents
+            job.output_files = website_file_paths
             job.completed_at = datetime.utcnow()
             job_repository.update(job)
             
@@ -113,12 +132,20 @@ def generate_content_task(
         
     except Exception as e:
         # Mark job as failed
+        error_msg = f"Task failed for job {job_id}: {str(e)}"
+        logger.error(error_msg, exc_info=True)
         if job:
-            job.status = "failed"
-            job.error_message = str(e)
-            job_repository.update(job)
-            job_logger.log_failed(job_id, job.user_id or 0, str(e))
-        raise
+            try:
+                job.status = "failed"
+                job.error_message = str(e)
+                job_repository.update(job)
+                job_logger.log_failed(job_id, job.user_id or 0, str(e))
+            except Exception as update_error:
+                logger.error(f"Failed to update job status: {update_error}", exc_info=True)
+        # Don't re-raise - BackgroundTasks will log it, but we've already handled it
     finally:
-        db.close()
+        try:
+            db.close()
+        except Exception as e:
+            logger.error(f"Error closing database connection: {e}")
 

@@ -1,15 +1,22 @@
 """Authentication API endpoints."""
 import secrets
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
-from pydantic import BaseModel
 from datetime import datetime
 
+from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
+
 from app.database import get_db
-from app.models.user import User
-from app.models.session import Session as SessionModel
-from app.utils.password import hash_password, verify_password
 from app.middleware.auth import get_current_user
+from app.models.session import Session as SessionModel
+from app.models.user import User
+from app.repositories.session_repository import SessionRepository
+from app.repositories.user_repository import UserRepository
+from app.utils.logger import get_logger
+from app.utils.password import hash_password, verify_password
+from app.utils.responses import success_response
+
+logger = get_logger(__name__)
 
 router = APIRouter()
 
@@ -46,8 +53,9 @@ async def login(
         LoginResponse with token and user info
     """
     try:
-        # Find user
-        user = db.query(User).filter(User.username == request.username).first()
+        # Find user using repository
+        user_repository = UserRepository(db)
+        user = user_repository.get_by_username(request.username)
         
         if not user:
             raise HTTPException(
@@ -64,27 +72,27 @@ async def login(
     except HTTPException:
         raise
     except Exception as e:
-        print(f"Login error: {e}")
+        logger.error(f"Login error: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Login failed: {str(e)}"
+            detail="Login failed"
         )
     
     # Generate session token
     token = secrets.token_urlsafe(32)
     expires_at = SessionModel.get_expiry_time()
     
-    # Create session
+    # Create session using repository
+    session_repository = SessionRepository(db)
     session = SessionModel(
         user_id=user.id,
         token=token,
         expires_at=expires_at
     )
-    db.add(session)
+    session_repository.create(session)
     
-    # Update last login
-    user.last_login = datetime.utcnow()
-    db.commit()
+    # Update last login using repository
+    user_repository.update_last_login(user.id)
     
     return LoginResponse(
         token=token,
@@ -105,13 +113,11 @@ async def logout(
     """
     Logout current user (delete session).
     """
-    # Delete all sessions for user (or just current one)
-    sessions = db.query(SessionModel).filter(SessionModel.user_id == current_user.id).all()
-    for session in sessions:
-        db.delete(session)
-    db.commit()
+    # Delete all sessions for user using repository
+    session_repository = SessionRepository(db)
+    session_repository.delete_by_user_id(current_user.id)
     
-    return {"message": "Logged out successfully"}
+    return success_response(data=None, message="Logged out successfully")
 
 
 @router.get("/me", response_model=UserResponse)

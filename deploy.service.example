@@ -1,0 +1,19 @@
+[Unit]
+Description=Multi-Website Content Generator
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/path/to/doorway_content_generator
+Environment="PATH=/path/to/doorway_content_generator/venv/bin"
+ExecStart=/path/to/doorway_content_generator/venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4 --log-level info --access-log --no-reload
+Restart=always
+RestartSec=10
+StandardOutput=append:/path/to/doorway_content_generator/logs/backend.log
+StandardError=append:/path/to/doorway_content_generator/logs/backend.log
+
+[Install]
+WantedBy=multi-user.target
+

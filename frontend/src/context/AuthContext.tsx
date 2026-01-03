@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { authService, User } from '../services/auth';
+import { logger } from '../utils/logger';
 
 interface AuthContextType {
   user: User | null;
@@ -22,7 +23,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           const currentUser = await authService.getCurrentUser();
           setUser(currentUser);
         } catch (error) {
-          console.error('Failed to get current user:', error);
+          logger.error('Failed to get current user:', error);
           localStorage.removeItem('auth_token');
         }
       }
@@ -35,9 +36,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       const response = await authService.login({ username, password });
       setUser(response.user);
-    } catch (error: any) {
-      console.error('Login error:', error);
-      // Re-throw the error so the LoginForm can handle it
+    } catch (error: unknown) {
+      logger.error('Login error:', error);
       throw error;
     }
   };

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { jobsService, Job } from '../services/jobs';
 import { useError } from '../context/ErrorContext';
+import { logger } from '../utils/logger';
 
 interface UseJobsReturn {
   jobs: Job[];
@@ -27,17 +28,18 @@ export function useJobs(limit: number = 50): UseJobsReturn {
         setLoading(true);
       }
       setError(null);
-      console.log('🔄 useJobs: Fetching jobs with limit:', limit);
+      logger.debug('Fetching jobs with limit:', limit);
       const data = await jobsService.listJobs(limit);
-      console.log('✅ useJobs: Received jobs:', data.length, data);
+      logger.debug('Received jobs:', data.length);
       setJobs(data);
       if (data.length === 0) {
-        console.log('ℹ️ useJobs: No jobs found');
+        logger.debug('No jobs found');
       }
       isInitialLoad.current = false;
-    } catch (err: any) {
-      console.error('❌ useJobs: Error fetching jobs:', err);
-      const errorMessage = err.response?.data?.detail || err.message || 'Failed to load jobs';
+    } catch (err: unknown) {
+      logger.error('Error fetching jobs:', err);
+      const errObj = err as { response?: { data?: { detail?: string } }; message?: string };
+      const errorMessage = errObj.response?.data?.detail || errObj.message || 'Failed to load jobs';
       setError(errorMessage);
       showError(errorMessage);
       setJobs([]);

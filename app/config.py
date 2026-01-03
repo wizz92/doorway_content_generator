@@ -10,6 +10,15 @@ class Settings(BaseSettings):
     
     # API Configuration
     openrouter_api_key: str = Field(default="", description="OpenRouter API key")
+    openrouter_api_url: str = Field(
+        default="https://openrouter.ai/api/v1",
+        description="OpenRouter API base URL"
+    )
+    openrouter_model: str = Field(
+        default="google/gemini-2.5-flash-lite",
+        # default="google/gemini-2.5-flash-lite",
+        description="OpenRouter model to use for content generation"
+    )
     backend_port: int = Field(default=8000, ge=1, le=65535, description="Backend server port")
     
     # Job Limits
@@ -52,6 +61,12 @@ class Settings(BaseSettings):
     
     # Session Configuration
     session_expiry_hours: int = Field(default=24, ge=1, description="Session expiry in hours")
+    
+    # File Storage Configuration
+    output_dir: str = Field(
+        default="outputs",
+        description="Directory for storing generated output files"
+    )
     
     @field_validator("cors_origins", mode="before")
     @classmethod

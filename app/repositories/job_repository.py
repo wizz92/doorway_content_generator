@@ -36,10 +36,6 @@ class JobRepository:
         Returns:
             List of jobs ordered by creation date (newest first)
         """
-        import logging
-        logger = logging.getLogger(__name__)
-        
-        # IMPORTANT: Query Job table, NOT JobLog table!
         jobs = (
             self.db.query(Job)
             .filter(Job.user_id == user_id)
@@ -47,15 +43,6 @@ class JobRepository:
             .limit(limit)
             .all()
         )
-        
-        logger.info(f"📋 JobRepository.get_by_user: Found {len(jobs)} Job objects (NOT JobLog!) for user_id={user_id}")
-        
-        # Verify we're returning Job objects, not JobLog objects
-        for job in jobs:
-            if not isinstance(job, Job):
-                logger.error(f"❌ ERROR: Expected Job object, got {type(job)}")
-            else:
-                logger.debug(f"  ✓ Job {job.id}: status={job.status}, created_at={job.created_at}")
         
         return jobs
     

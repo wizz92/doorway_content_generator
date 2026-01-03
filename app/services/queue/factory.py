@@ -6,6 +6,9 @@ from app.services.queue.base import QueueInterface
 from app.services.queue.rq_queue import RQQueue
 from app.services.queue.background_queue import BackgroundTasksQueue
 from app.config import settings
+from app.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 def create_queue_service(background_tasks: Optional[BackgroundTasks] = None) -> QueueInterface:
@@ -21,14 +24,14 @@ def create_queue_service(background_tasks: Optional[BackgroundTasks] = None) -> 
     if settings.use_redis:
         rq_queue = RQQueue()
         if rq_queue.is_available():
-            print("✅ Redis/RQ queue initialized")
+            logger.info("Redis/RQ queue initialized")
             return rq_queue
         else:
-            print("⚠️  Redis not available, using BackgroundTasks")
+            logger.warning("Redis not available, using BackgroundTasks")
     
     if background_tasks is None:
         raise ValueError("BackgroundTasks required when Redis is not available")
     
-    print("ℹ️  Using BackgroundTasks queue")
+    logger.info("Using BackgroundTasks queue")
     return BackgroundTasksQueue(background_tasks)
 

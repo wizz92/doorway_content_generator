@@ -28,7 +28,7 @@ class Job(Base):
     websites_completed = Column(Integer, default=0)
     total_keywords = Column(Integer, default=0)
     keywords_completed = Column(Integer, default=0)
-    output_files = Column(JSON, nullable=True)  # Store file paths or content references
+    output_files = Column(JSON, nullable=True)  # Store file paths (relative to output directory)
     
     # Relationships
     user = relationship("User", back_populates="jobs")

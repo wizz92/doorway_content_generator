@@ -24,7 +24,7 @@ interface JobCardProps {
   onUpdate: () => void;
 }
 
-export const JobCard: React.FC<JobCardProps> = ({ job, onUpdate }) => {
+export const JobCard: React.FC<JobCardProps> = React.memo(({ job, onUpdate }) => {
   const { showError, showSuccess } = useError();
   const theme = useTheme();
   const StatusIcon = getStatusIcon(job.status);
@@ -41,8 +41,9 @@ export const JobCard: React.FC<JobCardProps> = ({ job, onUpdate }) => {
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
       showSuccess('Download started');
-    } catch (error: any) {
-      showError(error.message || 'Failed to download');
+    } catch (error: unknown) {
+      const errorMessage = (error as Error).message || 'Failed to download';
+      showError(errorMessage);
     }
   };
 
@@ -51,8 +52,9 @@ export const JobCard: React.FC<JobCardProps> = ({ job, onUpdate }) => {
       await jobsService.cancelJob(job.id);
       showSuccess('Job cancelled');
       onUpdate();
-    } catch (error: any) {
-      showError(error.message || 'Failed to cancel job');
+    } catch (error: unknown) {
+      const errorMessage = (error as Error).message || 'Failed to cancel job';
+      showError(errorMessage);
     }
   };
 
@@ -130,6 +132,7 @@ export const JobCard: React.FC<JobCardProps> = ({ job, onUpdate }) => {
                 onClick={handleDownload}
                 variant="contained"
                 size="small"
+                aria-label={`Download results for job ${String(job.id).slice(0, 8)}`}
                 sx={{
                   transition: 'all 0.2s ease-in-out',
                   '&:hover': {
@@ -148,6 +151,7 @@ export const JobCard: React.FC<JobCardProps> = ({ job, onUpdate }) => {
                 variant="outlined"
                 size="small"
                 color="error"
+                aria-label={`Cancel job ${String(job.id).slice(0, 8)}`}
                 sx={{
                   transition: 'all 0.2s ease-in-out',
                   '&:hover': {
@@ -250,4 +254,4 @@ export const JobCard: React.FC<JobCardProps> = ({ job, onUpdate }) => {
       </CardContent>
     </Card>
   );
-};
+});

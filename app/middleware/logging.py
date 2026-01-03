@@ -8,6 +8,9 @@ from datetime import datetime
 
 from app.database import SessionLocal
 from app.models.log import ApiLog
+from app.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 class LoggingMiddleware(BaseHTTPMiddleware):
@@ -60,7 +63,7 @@ class LoggingMiddleware(BaseHTTPMiddleware):
                 lambda: self._log_request_sync(user_id, request, response)
             )
         except Exception as e:
-            print(f"Error logging API request: {e}")
+            logger.error(f"Error logging API request: {e}", exc_info=True)
     
     def _log_request_sync(self, user_id, request: Request, response):
         """Synchronous logging function."""
@@ -79,6 +82,6 @@ class LoggingMiddleware(BaseHTTPMiddleware):
             db.commit()
         except Exception as e:
             db.rollback()
-            print(f"Error logging API request: {e}")
+            logger.error(f"Error logging API request: {e}", exc_info=True)
         finally:
             db.close()

@@ -2,8 +2,9 @@
 
 This application is designed to run completely locally without Docker. It uses:
 - **SQLite** for the database (included with Python, no setup needed)
-- **Local Redis** for the job queue (install via package manager)
+- **FastAPI BackgroundTasks** for job processing (no Redis needed!)
 - **No Docker** required
+- **No Redis** required for local development
 
 ## Quick Setup
 
@@ -16,42 +17,12 @@ Run the automated setup script:
 This will:
 1. Create virtual environment
 2. Install all Python dependencies
-3. Check Redis installation
-4. Create `.env` file
-5. Initialize SQLite database
+3. Create `.env` file
+4. Initialize SQLite database
 
 ## Manual Setup
 
-### 1. Install Redis Locally
-
-**macOS (Homebrew):**
-```bash
-brew install redis
-brew services start redis
-```
-
-**Linux (Ubuntu/Debian):**
-```bash
-sudo apt-get update
-sudo apt-get install redis-server
-sudo systemctl start redis
-sudo systemctl enable redis  # Start on boot
-```
-
-**Linux (Fedora/RHEL):**
-```bash
-sudo dnf install redis
-sudo systemctl start redis
-sudo systemctl enable redis  # Start on boot
-```
-
-**Verify Redis is running:**
-```bash
-redis-cli ping
-# Should return: PONG
-```
-
-### 2. Setup Python Environment
+### 1. Setup Python Environment
 
 ```bash
 # Create virtual environment
@@ -64,7 +35,7 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-### 3. Configure Environment
+### 2. Configure Environment
 
 ```bash
 # Copy example env file
@@ -77,9 +48,10 @@ nano .env  # or use your preferred editor
 Required in `.env`:
 ```env
 OPENROUTER_API_KEY=your_actual_api_key_here
+USE_REDIS=false  # Set to false to use FastAPI BackgroundTasks (default)
 ```
 
-### 4. Initialize Database
+### 3. Initialize Database
 
 SQLite database is created automatically, but you can initialize it manually:
 
@@ -97,23 +69,18 @@ This creates `content_generator.db` in the project directory.
 ./run.sh
 ```
 
-This starts both the RQ worker and FastAPI server.
+This starts the FastAPI server. No Redis worker needed!
 
-### Option 2: Manual start (two terminals)
+### Option 2: Manual start
 
-**Terminal 1 - Start RQ Worker:**
-```bash
-source venv/bin/activate
-rq worker --url redis://localhost:6379/0
-```
-
-**Terminal 2 - Start FastAPI Server:**
 ```bash
 source venv/bin/activate
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 Then open http://localhost:8000 in your browser.
+
+**Note:** The app uses FastAPI's built-in `BackgroundTasks` for job processing, so no separate worker process is needed!
 
 ## Database Location
 
@@ -124,32 +91,22 @@ The SQLite database is stored at:
 
 This file is created automatically on first run. You can delete it to reset the database.
 
-## Redis Configuration
+## How It Works (No Redis Mode)
 
-Redis runs locally on:
-- **Host**: localhost
-- **Port**: 6379
-- **Database**: 0 (default)
+The application uses FastAPI's `BackgroundTasks` for asynchronous job processing:
+- ✅ Jobs run in the background automatically
+- ✅ No Redis or external services needed
+- ✅ All job state stored in SQLite database
+- ✅ Perfect for local development
 
-You can change this in `.env`:
-```env
-REDIS_URL=redis://localhost:6379/0
-```
+To use Redis (optional, for production):
+1. Set `USE_REDIS=true` in `.env`
+2. Install and start Redis
+3. Start an RQ worker in a separate terminal
+
+See `NO_REDIS_SETUP.md` for more details.
 
 ## Troubleshooting
-
-### Redis not running
-```bash
-# Check status
-redis-cli ping
-
-# Start Redis
-# macOS:
-brew services start redis
-
-# Linux:
-sudo systemctl start redis
-```
 
 ### Port 8000 already in use
 ```bash
@@ -165,11 +122,6 @@ uvicorn app.main:app --reload --port 8001
 - Close any database viewers that might have the DB open
 - Delete `content_generator.db` and reinitialize if needed
 
-### Redis connection refused
-- Verify Redis is installed: `which redis-server`
-- Check if Redis is running: `redis-cli ping`
-- Check Redis logs: `tail -f /var/log/redis/redis-server.log` (Linux)
-
 ## File Structure
 
 ```
@@ -183,13 +135,14 @@ uvicorn app.main:app --reload --port 8001
 └── ...
 ```
 
-## Why No Docker?
+## Why No Docker or Redis?
 
-This application is designed for local development and doesn't require Docker because:
+This application is designed for local development and doesn't require Docker or Redis because:
 - SQLite is file-based and works out of the box
-- Redis is easy to install via package managers
+- FastAPI BackgroundTasks handles job processing without external services
 - No complex orchestration needed for local development
 - Faster startup and simpler debugging
+- One less service to manage and configure
 
-For production deployment, you may want to use Docker, but for local development, this setup is simpler and faster.
+For production deployment, you may want to use Docker and Redis, but for local development, this setup is simpler and faster.
 

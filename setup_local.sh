@@ -43,30 +43,6 @@ pip install -r requirements.txt
 echo "✅ Dependencies installed"
 echo ""
 
-# Check Redis
-echo "🔍 Checking Redis installation..."
-if command -v redis-cli &> /dev/null; then
-    if redis-cli ping > /dev/null 2>&1; then
-        echo "✅ Redis is installed and running"
-    else
-        echo "⚠️  Redis is installed but not running"
-        echo ""
-        echo "Please start Redis:"
-        echo "  macOS: brew services start redis"
-        echo "  Linux: sudo systemctl start redis"
-        echo ""
-    fi
-else
-    echo "⚠️  Redis is not installed"
-    echo ""
-    echo "Please install Redis:"
-    echo "  macOS: brew install redis && brew services start redis"
-    echo "  Linux (Ubuntu/Debian): sudo apt-get install redis-server && sudo systemctl start redis"
-    echo "  Linux (Fedora/RHEL): sudo dnf install redis && sudo systemctl start redis"
-    echo ""
-fi
-echo ""
-
 # Setup environment file
 echo "⚙️  Setting up environment file..."
 if [ ! -f ".env" ]; then
@@ -82,7 +58,7 @@ MAX_KEYWORDS=1000
 MAX_WEBSITES=100
 REQUEST_DELAY_SECONDS=2.0
 TASK_TIMEOUT=300
-REDIS_URL=redis://localhost:6379/0
+USE_REDIS=false
 DATABASE_URL=sqlite:///./content_generator.db
 EOF
         echo "✅ Created .env file"
@@ -106,11 +82,13 @@ echo "✅ Setup complete!"
 echo ""
 echo "Next steps:"
 echo "  1. Edit .env and add your OPENROUTER_API_KEY"
-echo "  2. Make sure Redis is running: redis-cli ping"
-echo "  3. Run the application: ./run.sh"
+echo "  2. Run the application: ./run.sh"
 echo ""
 echo "Or start manually:"
-echo "  Terminal 1: rq worker --url redis://localhost:6379/0"
-echo "  Terminal 2: uvicorn app.main:app --reload"
+echo "  source venv/bin/activate"
+echo "  uvicorn app.main:app --reload --host 0.0.0.0 --port 8000"
+echo ""
+echo "ℹ️  Note: The app runs without Redis by default using FastAPI BackgroundTasks"
+echo "   No additional services needed for local development!"
 echo ""
 

@@ -1,5 +1,6 @@
 """User repository for database access."""
 from typing import Optional
+
 from sqlalchemy.orm import Session
 
 from app.models.user import User
@@ -9,7 +10,12 @@ class UserRepository:
     """Repository for user data access operations."""
     
     def __init__(self, db: Session):
-        """Initialize repository with database session."""
+        """
+        Initialize repository with database session.
+        
+        Args:
+            db: Database session
+        """
         self.db = db
     
     def get_by_id(self, user_id: int) -> Optional[User]:
@@ -36,6 +42,30 @@ class UserRepository:
         """
         return self.db.query(User).filter(User.username == username).first()
     
+    def update_last_login(self, user_id: int) -> User:
+        """
+        Update user's last login timestamp.
+        
+        Args:
+            user_id: User identifier
+            
+        Returns:
+            Updated user instance
+            
+        Raises:
+            ValueError: If user not found
+        """
+        from datetime import datetime
+        
+        user = self.get_by_id(user_id)
+        if not user:
+            raise ValueError(f"User with id {user_id} not found")
+        
+        user.last_login = datetime.utcnow()
+        self.db.commit()
+        self.db.refresh(user)
+        return user
+    
     def create(self, user: User) -> User:
         """
         Create a new user.
@@ -50,18 +80,3 @@ class UserRepository:
         self.db.commit()
         self.db.refresh(user)
         return user
-    
-    def update(self, user: User) -> User:
-        """
-        Update an existing user.
-        
-        Args:
-            user: User instance to update
-            
-        Returns:
-            Updated user instance
-        """
-        self.db.commit()
-        self.db.refresh(user)
-        return user
-

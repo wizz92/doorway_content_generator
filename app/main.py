@@ -45,14 +45,10 @@ app.add_exception_handler(RequestValidationError, validation_exception_handler)
 app.add_exception_handler(SQLAlchemyError, database_exception_handler)
 app.add_exception_handler(Exception, generic_exception_handler)
 
-# Include API routes
+# Include API routes with versioning
 # Order matters - more specific routes first
-# IMPORTANT: Register main routes FIRST to ensure /api/jobs is matched before logs router
-# The main router has routes with /api prefix hardcoded (e.g., /api/jobs)
-app.include_router(router, tags=["main"])  # Main routes include /api/jobs - NO prefix, routes already have /api prefix
-app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
-# Logs router has prefix /api/logs, so /jobs route becomes /api/logs/jobs (NOT /api/jobs)
-# app.include_router(logs_router, prefix="/api/logs", tags=["logs"])  # Logs routes under /api/logs (not /api/jobs)
+app.include_router(router, prefix="/api/v1", tags=["main"])
+app.include_router(auth_router, prefix="/api/v1/auth", tags=["auth"])
 
 
 @app.on_event("startup")

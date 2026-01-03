@@ -2,6 +2,9 @@
 from typing import Callable, Any
 from app.services.queue.base import QueueInterface
 from app.config import settings
+from app.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 class RQQueue(QueueInterface):
@@ -16,7 +19,7 @@ class RQQueue(QueueInterface):
             self.queue = Queue(connection=self.redis_conn)
             self._available = True
         except Exception as e:
-            print(f"⚠️  Redis not available: {e}")
+            logger.warning(f"Redis not available: {e}")
             self._available = False
             self.queue = None
     
