@@ -1,5 +1,5 @@
 """Job-related schemas."""
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from datetime import datetime
 from pydantic import BaseModel, Field
 
@@ -42,6 +42,8 @@ class JobResponse(BaseModel):
     error_message: Optional[str] = None
     created_at: str
     completed_at: Optional[str] = None
+    keywords: Optional[List[str]] = None
+    keyword_status: Optional[Dict[str, Dict[str, Any]]] = None
     
     @classmethod
     def from_orm(cls, job: Job) -> "JobResponse":
@@ -54,6 +56,9 @@ class JobResponse(BaseModel):
         Returns:
             JobResponse instance
         """
+        # Calculate keyword status
+        keyword_status = cls._calculate_keyword_status(job)
+        
         return cls(
             id=str(job.id),
             status=job.status or "queued",
@@ -67,7 +72,74 @@ class JobResponse(BaseModel):
             error_message=job.error_message,
             created_at=format_datetime(job.created_at),
             completed_at=format_datetime(job.completed_at) if job.completed_at else None,
+            keywords=job.keywords if job.keywords else [],
+            keyword_status=keyword_status,
         )
+    
+    @staticmethod
+    def _calculate_keyword_status(job: Job) -> Dict[str, Dict[str, Any]]:
+        """
+        Calculate keyword completion status per website.
+        
+        Args:
+            job: Job model instance
+            
+        Returns:
+            Dictionary mapping keyword to status info:
+            {
+                "keyword1": {
+                    "completed_websites": [1, 2],
+                    "total_websites": 3
+                },
+                ...
+            }
+        """
+        if not job.keywords or not isinstance(job.keywords, list):
+            return {}
+        
+        num_websites = job.num_websites or 0
+        
+        # Normalize completed_keywords - handle JSON deserialization
+        # SQLite may store JSON as TEXT, so we need to handle both dict and string
+        import json
+        completed_keywords = job.completed_keywords
+        if completed_keywords is None:
+            completed_keywords = {}
+        elif isinstance(completed_keywords, str):
+            # Try to parse JSON string
+            try:
+                parsed = json.loads(completed_keywords)
+                completed_keywords = parsed if isinstance(parsed, dict) else {}
+            except (json.JSONDecodeError, TypeError):
+                completed_keywords = {}
+        elif not isinstance(completed_keywords, dict):
+            completed_keywords = {}
+        
+        # If job is completed but completed_keywords is empty, assume all keywords are completed for all websites
+        # This handles legacy jobs created before checkpointing was implemented
+        if job.status == "completed" and (not completed_keywords or len(completed_keywords) == 0):
+            all_websites = list(range(1, num_websites + 1))
+            return {keyword: {"completed_websites": all_websites, "total_websites": num_websites} for keyword in job.keywords}
+        
+        keyword_status = {}
+        
+        for keyword in job.keywords:
+            completed_websites = []
+            
+            # Check each website index (1-based)
+            for website_index in range(1, num_websites + 1):
+                website_key = str(website_index)
+                if website_key in completed_keywords:
+                    completed_list = completed_keywords[website_key]
+                    if isinstance(completed_list, list) and keyword in completed_list:
+                        completed_websites.append(website_index)
+            
+            keyword_status[keyword] = {
+                "completed_websites": completed_websites,
+                "total_websites": num_websites
+            }
+        
+        return keyword_status
 
 
 class JobListResponse(BaseModel):

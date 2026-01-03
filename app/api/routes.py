@@ -245,3 +245,21 @@ async def cancel_job(
     job_service = get_job_service(background_tasks, db)
     job_service.cancel_job(job_id, current_user.id)
     return success_response(data=None, message="Job cancelled")
+
+
+@router.post("/job/{job_id}/resume")
+async def resume_job(
+    job_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    background_tasks: BackgroundTasks = BackgroundTasks()
+):
+    """
+    Resume a failed or interrupted job from the last checkpoint.
+    """
+    job_service = get_job_service(background_tasks, db)
+    result = job_service.resume_job(job_id, current_user.id)
+    return success_response(
+        data=result,
+        message=f"Job resumed from checkpoint ({result.get('previous_progress', 0)} keywords completed)"
+    )

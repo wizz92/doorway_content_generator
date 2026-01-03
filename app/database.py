@@ -29,6 +29,7 @@ class Job(Base):
     total_keywords = Column(Integer, default=0)
     keywords_completed = Column(Integer, default=0)
     output_files = Column(JSON, nullable=True)  # Store file paths (relative to output directory)
+    completed_keywords = Column(JSON, nullable=True)  # Store dict: {website_index: [keyword1, keyword2, ...]}
     
     # Relationships
     user = relationship("User", back_populates="jobs")
@@ -55,7 +56,29 @@ def init_db():
     """Initialize database tables."""
     # Import all models to ensure they're registered
     from app.models import user, session, log
+    
+    # Create all tables
     Base.metadata.create_all(bind=engine)
+    
+    # For SQLite, check and add missing columns (migration support)
+    if "sqlite" in settings.database_url:
+        try:
+            conn = engine.raw_connection()
+            cursor = conn.cursor()
+            
+            # Check if completed_keywords column exists
+            cursor.execute("PRAGMA table_info(jobs)")
+            columns = [row[1] for row in cursor.fetchall()]
+            
+            if "completed_keywords" not in columns:
+                cursor.execute("ALTER TABLE jobs ADD COLUMN completed_keywords TEXT")
+                conn.commit()
+            
+            conn.close()
+        except Exception as e:
+            # If migration fails, log but don't fail initialization
+            import logging
+            logging.warning(f"Could not migrate database schema: {e}")
 
 
 def get_db():

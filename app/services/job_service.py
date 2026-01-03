@@ -15,6 +15,9 @@ from app.services.job_logger import JobLogger
 from app.services.output_formatter import create_zip_archive
 from app.services.queue import QueueInterface
 from app.tasks import generate_content_task
+from app.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 class JobService:
@@ -124,6 +127,7 @@ class JobService:
             lang=request.lang,
             geo=request.geo,
             num_websites=request.num_websites,
+            max_workers=settings.max_parallel_workers,
             job_timeout=settings.task_timeout
         )
         
@@ -257,6 +261,79 @@ class JobService:
         job.status = "failed"
         job.error_message = "Cancelled by user"
         self.job_repository.update(job)
+    
+    def resume_job(
+        self,
+        job_id: str,
+        user_id: int
+    ) -> Dict:
+        """
+        Resume a failed or interrupted job from the last checkpoint.
+        
+        Args:
+            job_id: Job identifier
+            user_id: User identifier
+            
+        Returns:
+            Dictionary with status and job information
+            
+        Raises:
+            JobNotFoundError: If job not found
+            JobAccessDeniedError: If user doesn't own job
+            ValueError: If job cannot be resumed
+        """
+        from app.constants import ESTIMATED_TIME_PER_KEYWORD_PER_WEBSITE_SECONDS
+        
+        job = self.job_repository.get_and_validate_ownership(job_id, user_id)
+        
+        # Check if job can be resumed
+        if job.status == "completed":
+            raise ValueError("Job is already completed")
+        
+        if job.status not in ["processing", "failed"]:
+            raise ValueError(f"Job cannot be resumed from status: {job.status}")
+        
+        if not job.keywords or not job.lang or not job.geo or not job.num_websites:
+            raise ValueError("Job is missing required parameters for resumption")
+        
+        # Check if there's any progress to resume from
+        if not job.keywords_completed or job.keywords_completed == 0:
+            logger.warning(f"Job {job_id} has no progress to resume from. Starting fresh.")
+        
+        # Update job status to queued for processing
+        job.status = "queued"
+        job.error_message = None
+        job = self.job_repository.update(job)
+        
+        # Enqueue task with existing parameters
+        self.queue.enqueue(
+            generate_content_task,
+            job_id=job_id,
+            keywords=job.keywords,
+            lang=job.lang,
+            geo=job.geo,
+            num_websites=job.num_websites,
+            job_timeout=settings.task_timeout
+        )
+        
+        # Calculate remaining work
+        total_keywords = len(job.keywords)
+        completed_keywords = job.keywords_completed or 0
+        remaining_keywords = total_keywords - completed_keywords
+        
+        estimated_time = remaining_keywords * job.num_websites * ESTIMATED_TIME_PER_KEYWORD_PER_WEBSITE_SECONDS
+        
+        logger.info(f"Resuming job {job_id}: {completed_keywords}/{total_keywords} keywords completed")
+        
+        return {
+            "status": "queued",
+            "estimated_time": estimated_time,
+            "job_id": job_id,
+            "resumed": True,
+            "previous_progress": completed_keywords,
+            "total_keywords": total_keywords,
+            "remaining_keywords": remaining_keywords
+        }
     
     def _read_website_files(self, job_id: str, job) -> Dict[int, str]:
         """

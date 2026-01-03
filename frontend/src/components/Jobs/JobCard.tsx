@@ -18,6 +18,7 @@ import { useError } from '../../context/ErrorContext';
 import { formatDate } from '../../utils/dateUtils';
 import { getStatusColor, getStatusIcon, formatStatus, getStatusDisplayText } from '../../utils/statusUtils';
 import { shouldShowProgress } from '../../utils/jobUtils';
+import { KeywordsAccordion } from './KeywordsAccordion';
 
 interface JobCardProps {
   job: Job;
@@ -95,7 +96,7 @@ export const JobCard: React.FC<JobCardProps> = React.memo(({ job, onUpdate }) =>
             >
               Job {String(job.id).slice(0, 8)}...
             </Typography>
-            <Stack direction="row" spacing={1} flexWrap="wrap" sx={{ gap: 1 }}>
+            <Stack direction="row" spacing={1} flexWrap="wrap" sx={{ gap: 1, alignItems: 'center' }}>
               <Chip
                 icon={<StatusIcon sx={{ fontSize: 16, mr: 0.5 }} />}
                 label={formatStatus(job.status)}
@@ -252,6 +253,7 @@ export const JobCard: React.FC<JobCardProps> = React.memo(({ job, onUpdate }) =>
           )}
         </Stack>
       </CardContent>
+      {job.keywords && job.keywords.length > 0 && <KeywordsAccordion job={job} />}
     </Card>
   );
 });

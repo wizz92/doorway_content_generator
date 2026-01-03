@@ -35,6 +35,8 @@ export function normalizeJob(job: any): Job | null {
     error_message: job.error_message || undefined,
     created_at: job.created_at || new Date().toISOString(),
     completed_at: job.completed_at || undefined,
+    keywords: Array.isArray(job.keywords) ? job.keywords : undefined,
+    keyword_status: job.keyword_status && typeof job.keyword_status === 'object' ? job.keyword_status : undefined,
   };
 }
 

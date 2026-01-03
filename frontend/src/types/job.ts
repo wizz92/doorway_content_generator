@@ -1,6 +1,12 @@
 /** Job status types */
 export type JobStatus = 'queued' | 'processing' | 'completed' | 'failed';
 
+/** Keyword status interface */
+export interface KeywordStatus {
+  completed_websites: number[];
+  total_websites: number;
+}
+
 /** Job interface */
 export interface Job {
   id: string;
@@ -15,6 +21,8 @@ export interface Job {
   error_message?: string;
   created_at: string;
   completed_at?: string;
+  keywords?: string[];
+  keyword_status?: Record<string, KeywordStatus>;
 }
 
 /** Job status response from API */
