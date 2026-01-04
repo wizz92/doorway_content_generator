@@ -1,24 +1,18 @@
-import { ApiError } from '../types/api';
 import axios from 'axios';
+
+import { ApiError } from '../types/api';
 
 /**
  * Extract error message from API error.
+ * This is a convenience function that wraps handleApiError for simpler use cases.
  */
 export function extractErrorMessage(error: unknown): string {
-  if (axios.isAxiosError(error)) {
-    const apiError = error.response?.data as ApiError | undefined;
-    return apiError?.detail || apiError?.message || error.message || 'An error occurred';
-  }
-  
-  if (error instanceof Error) {
-    return error.message;
-  }
-  
-  return 'An unexpected error occurred';
+  return handleApiError(error);
 }
 
 /**
  * Handle API error and return user-friendly message.
+ * This is the main error handling function that should be used throughout the app.
  */
 export function handleApiError(error: unknown): string {
   if (axios.isAxiosError(error)) {

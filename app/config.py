@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     # Task Configuration
     request_delay_seconds: float = Field(default=2.0, ge=0, description="Delay between API requests")
     task_timeout: int = Field(default=300, ge=1, description="Task timeout in seconds")
-    max_parallel_workers: int = Field(default=8, ge=1, le=20, description="Maximum number of parallel workers for keyword processing")
+    max_parallel_workers: int = Field(default=16, ge=1, le=20, description="Maximum number of parallel workers for keyword processing")
     
     # Database Configuration
     database_url: str = Field(

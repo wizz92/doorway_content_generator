@@ -1,5 +1,7 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, { createContext, ReactNode, useContext, useState } from 'react';
 import { Alert, Snackbar } from '@mui/material';
+
+import { SNACKBAR_DURATION_ERROR, SNACKBAR_DURATION_SUCCESS } from '../constants';
 
 interface ErrorContextType {
   showError: (message: string) => void;
@@ -29,7 +31,7 @@ export const ErrorProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       {children}
       <Snackbar
         open={open}
-        autoHideDuration={6000}
+        autoHideDuration={SNACKBAR_DURATION_ERROR}
         onClose={() => setOpen(false)}
         anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
       >
@@ -39,7 +41,7 @@ export const ErrorProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       </Snackbar>
       <Snackbar
         open={openSuccess}
-        autoHideDuration={4000}
+        autoHideDuration={SNACKBAR_DURATION_SUCCESS}
         onClose={() => setOpenSuccess(false)}
         anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
       >

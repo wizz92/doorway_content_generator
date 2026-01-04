@@ -1,15 +1,15 @@
 """Job service for business logic."""
 import uuid
-from typing import List, Dict
+from typing import Dict, List
 
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.constants import ESTIMATED_TIME_PER_KEYWORD_PER_WEBSITE_SECONDS
 from app.database import Job
-from app.exceptions import JobNotFoundError, JobAccessDeniedError, JobInvalidStateError
+from app.exceptions import JobAccessDeniedError, JobInvalidStateError, JobNotFoundError
 from app.repositories.job_repository import JobRepository
-from app.schemas import GenerateRequest, JobStatusResponse, JobResponse
+from app.schemas import GenerateRequest, JobResponse, JobStatusResponse
 from app.services.file_storage import FileStorageService
 from app.services.job_logger import JobLogger
 from app.services.output_formatter import create_zip_archive
@@ -191,9 +191,6 @@ class JobService:
         Returns:
             List of job responses
         """
-        from app.utils.logger import get_logger
-        logger = get_logger(__name__)
-        
         jobs = self.job_repository.get_by_user(user_id, limit)
         
         if len(jobs) == 0:
@@ -201,32 +198,75 @@ class JobService:
         
         result = []
         for job in jobs:
-            if not isinstance(job, Job):
-                logger.error(f"Expected Job object, got {type(job)}")
-                raise TypeError(f"Expected Job object, got {type(job)}")
-            
-            if not hasattr(job, 'id') or not hasattr(job, 'status'):
-                logger.warning(f"Invalid job object: {type(job)}")
+            if not self._validate_job_object(job):
                 continue
             
-            try:
-                job = self.job_repository.refresh_job(job)
-            except Exception as e:
-                logger.error(f"Error refreshing job {job.id}: {e}", exc_info=True)
+            refreshed_job = self._refresh_job_safely(job)
+            if not refreshed_job:
                 continue
             
-            try:
-                job_response = JobResponse.from_orm(job)
-                if not isinstance(job_response, JobResponse):
-                    logger.error(f"JobResponse.from_orm returned {type(job_response)}")
-                    raise TypeError(f"Expected JobResponse, got {type(job_response)}")
+            job_response = self._convert_job_to_response(refreshed_job)
+            if job_response:
                 result.append(job_response)
-            except Exception as e:
-                logger.error(f"Error converting job {job.id} to JobResponse: {e}", exc_info=True)
-                continue
         
         logger.debug(f"Returning {len(result)} jobs for user {user_id}")
         return result
+    
+    def _validate_job_object(self, job: Job) -> bool:
+        """
+        Validate that job object has required attributes.
+        
+        Args:
+            job: Job object to validate
+            
+        Returns:
+            True if valid, False otherwise
+        """
+        if not isinstance(job, Job):
+            logger.error(f"Expected Job object, got {type(job)}")
+            return False
+        
+        if not hasattr(job, 'id') or not hasattr(job, 'status'):
+            logger.warning(f"Invalid job object: {type(job)}")
+            return False
+        
+        return True
+    
+    def _refresh_job_safely(self, job: Job) -> Job | None:
+        """
+        Refresh job from database safely, handling errors.
+        
+        Args:
+            job: Job object to refresh
+            
+        Returns:
+            Refreshed job or None if refresh fails
+        """
+        try:
+            return self.job_repository.refresh_job(job)
+        except Exception as e:
+            logger.error(f"Error refreshing job {job.id}: {e}", exc_info=True)
+            return None
+    
+    def _convert_job_to_response(self, job: Job) -> JobResponse | None:
+        """
+        Convert job to JobResponse safely, handling errors.
+        
+        Args:
+            job: Job object to convert
+            
+        Returns:
+            JobResponse or None if conversion fails
+        """
+        try:
+            job_response = JobResponse.from_orm(job)
+            if not isinstance(job_response, JobResponse):
+                logger.error(f"JobResponse.from_orm returned {type(job_response)}")
+                return None
+            return job_response
+        except Exception as e:
+            logger.error(f"Error converting job {job.id} to JobResponse: {e}", exc_info=True)
+            return None
     
     def cancel_job(
         self,

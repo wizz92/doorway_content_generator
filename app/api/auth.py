@@ -4,9 +4,9 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
-from sqlalchemy.orm import Session
 
-from app.database import get_db
+from app.dependencies import get_session_repository, get_user_repository
+from app.dependencies import get_session_repository, get_user_repository
 from app.middleware.auth import get_current_user
 from app.models.session import Session as SessionModel
 from app.models.user import User
@@ -44,7 +44,8 @@ class UserResponse(BaseModel):
 @router.post("/login", response_model=LoginResponse)
 async def login(
     request: LoginRequest,
-    db: Session = Depends(get_db)
+    user_repository: UserRepository = Depends(get_user_repository),
+    session_repository: SessionRepository = Depends(get_session_repository)
 ):
     """
     Login with username and password.
@@ -54,7 +55,6 @@ async def login(
     """
     try:
         # Find user using repository
-        user_repository = UserRepository(db)
         user = user_repository.get_by_username(request.username)
         
         if not user:
@@ -83,7 +83,6 @@ async def login(
     expires_at = SessionModel.get_expiry_time()
     
     # Create session using repository
-    session_repository = SessionRepository(db)
     session = SessionModel(
         user_id=user.id,
         token=token,
@@ -108,13 +107,12 @@ async def login(
 @router.post("/logout")
 async def logout(
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    session_repository: SessionRepository = Depends(get_session_repository)
 ):
     """
     Logout current user (delete session).
     """
     # Delete all sessions for user using repository
-    session_repository = SessionRepository(db)
     session_repository.delete_by_user_id(current_user.id)
     
     return success_response(data=None, message="Logged out successfully")

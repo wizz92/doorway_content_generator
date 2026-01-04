@@ -1,9 +1,10 @@
 """Job repository for database access."""
 from typing import List, Optional
+
 from sqlalchemy.orm import Session
-from fastapi import HTTPException, status
 
 from app.database import Job
+from app.exceptions import JobNotFoundError, JobAccessDeniedError
 
 
 class JobRepository:
@@ -66,24 +67,19 @@ class JobRepository:
             Job instance if found and user owns it
             
         Raises:
-            HTTPException: If job not found or user doesn't own it
+            JobNotFoundError: If job not found and raise_on_not_found is True
+            JobAccessDeniedError: If user doesn't own job and raise_on_access_denied is True
         """
         job = self.get_by_id(job_id)
         
         if not job:
             if raise_on_not_found:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="Job not found"
-                )
+                raise JobNotFoundError(job_id)
             return None
         
         if job.user_id != user_id:
             if raise_on_access_denied:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Access denied"
-                )
+                raise JobAccessDeniedError(job_id)
             return None
         
         return job
@@ -97,6 +93,9 @@ class JobRepository:
             
         Returns:
             Refreshed job instance
+            
+        Raises:
+            JobNotFoundError: If job cannot be refreshed and is not found
         """
         try:
             self.db.refresh(job)
@@ -104,10 +103,7 @@ class JobRepository:
             # If refresh fails, re-query the job
             refreshed_job = self.get_by_id(job.id)
             if not refreshed_job:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="Job not found"
-                )
+                raise JobNotFoundError(job.id)
             return refreshed_job
         return job
     

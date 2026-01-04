@@ -1,9 +1,14 @@
 /**
  * Error type definitions for better type safety.
+ * Re-exports ApiError from api.ts for consistency.
  */
 
-export interface ApiError {
-  message: string;
+export { ApiError } from './api';
+
+/**
+ * Type guard to check if error is an axios error with API error response.
+ */
+export function isAxiosApiError(error: unknown): error is {
   response?: {
     data?: {
       detail?: string;
@@ -12,25 +17,12 @@ export interface ApiError {
     };
     status?: number;
   };
-  request?: unknown;
-}
-
-export function isApiError(error: unknown): error is ApiError {
+  message?: string;
+} {
   return (
     typeof error === 'object' &&
     error !== null &&
-    'message' in error &&
-    typeof (error as ApiError).message === 'string'
+    'response' in error
   );
-}
-
-export function getErrorMessage(error: unknown): string {
-  if (isApiError(error)) {
-    return error.response?.data?.detail || error.response?.data?.error || error.response?.data?.message || error.message || 'An error occurred';
-  }
-  if (error instanceof Error) {
-    return error.message;
-  }
-  return 'An unknown error occurred';
 }
 

@@ -5,6 +5,11 @@ from fastapi.exceptions import RequestValidationError
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.exceptions.base import AppException
+from app.exceptions.job_exceptions import (
+    JobNotFoundError,
+    JobAccessDeniedError,
+    JobInvalidStateError,
+)
 from app.utils.logger import get_logger
 from app.utils.responses import error_response
 
@@ -115,6 +120,95 @@ async def database_exception_handler(
             error="Database error occurred",
             message="An internal error occurred"
         )
+    )
+
+
+async def job_not_found_handler(request: Request, exc: JobNotFoundError) -> JSONResponse:
+    """
+    Handle JobNotFoundError exceptions.
+    
+    Args:
+        request: FastAPI request
+        exc: JobNotFoundError exception
+        
+    Returns:
+        JSON error response
+    """
+    user_id = getattr(request.state, 'user_id', None)
+    
+    logger.warning(
+        f"Job not found: {exc.job_id}",
+        extra={
+            "user_id": user_id,
+            "job_id": exc.job_id,
+            "endpoint": request.url.path,
+            "method": request.method
+        }
+    )
+    
+    return JSONResponse(
+        status_code=exc.status_code,
+        content=error_response(error=exc.detail, message=exc.message)
+    )
+
+
+async def job_access_denied_handler(request: Request, exc: JobAccessDeniedError) -> JSONResponse:
+    """
+    Handle JobAccessDeniedError exceptions.
+    
+    Args:
+        request: FastAPI request
+        exc: JobAccessDeniedError exception
+        
+    Returns:
+        JSON error response
+    """
+    user_id = getattr(request.state, 'user_id', None)
+    
+    logger.warning(
+        f"Access denied to job: {exc.job_id}",
+        extra={
+            "user_id": user_id,
+            "job_id": exc.job_id,
+            "endpoint": request.url.path,
+            "method": request.method
+        }
+    )
+    
+    return JSONResponse(
+        status_code=exc.status_code,
+        content=error_response(error=exc.detail, message=exc.message)
+    )
+
+
+async def job_invalid_state_handler(request: Request, exc: JobInvalidStateError) -> JSONResponse:
+    """
+    Handle JobInvalidStateError exceptions.
+    
+    Args:
+        request: FastAPI request
+        exc: JobInvalidStateError exception
+        
+    Returns:
+        JSON error response
+    """
+    user_id = getattr(request.state, 'user_id', None)
+    
+    logger.warning(
+        f"Invalid job state: {exc.job_id}, status: {exc.current_status}, operation: {exc.operation}",
+        extra={
+            "user_id": user_id,
+            "job_id": exc.job_id,
+            "current_status": exc.current_status,
+            "operation": exc.operation,
+            "endpoint": request.url.path,
+            "method": request.method
+        }
+    )
+    
+    return JSONResponse(
+        status_code=exc.status_code,
+        content=error_response(error=exc.detail, message=exc.message)
     )
 
 

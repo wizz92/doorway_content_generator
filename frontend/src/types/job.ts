@@ -60,18 +60,23 @@ export function isJobStatus(value: string): value is JobStatus {
 }
 
 /** Type guard to check if object is a Job */
-export function isJob(value: any): value is Job {
+export function isJob(value: unknown): value is Job {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+  
+  const obj = value as Record<string, unknown>;
+  
   return (
-    value &&
-    typeof value === 'object' &&
-    typeof value.id === 'string' &&
-    isJobStatus(value.status) &&
-    typeof value.progress === 'number' &&
-    typeof value.keywords_completed === 'number' &&
-    typeof value.total_keywords === 'number' &&
-    typeof value.websites_completed === 'number' &&
-    typeof value.num_websites === 'number' &&
-    typeof value.created_at === 'string'
+    typeof obj.id === 'string' &&
+    typeof obj.status === 'string' &&
+    isJobStatus(obj.status) &&
+    typeof obj.progress === 'number' &&
+    typeof obj.keywords_completed === 'number' &&
+    typeof obj.total_keywords === 'number' &&
+    typeof obj.websites_completed === 'number' &&
+    typeof obj.num_websites === 'number' &&
+    typeof obj.created_at === 'string'
   );
 }
 

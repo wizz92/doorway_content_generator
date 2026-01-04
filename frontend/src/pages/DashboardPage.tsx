@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { Box } from '@mui/material';
-import { JobUpload } from '../components/Jobs/JobUpload';
+
 import { JobList } from '../components/Jobs/JobList';
+import { JobUpload } from '../components/Jobs/JobUpload';
 import { Layout } from '../components/Layout/Layout';
 import { logger } from '../utils/logger';
 

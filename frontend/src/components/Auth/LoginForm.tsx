@@ -1,18 +1,11 @@
-import React, { useState } from 'react';
-import {
-  Box,
-  Button,
-  TextField,
-  Typography,
-  Paper,
-  Container,
-  Alert,
-  Fade,
-  useTheme,
-} from '@mui/material';
-import { useAuth } from '../../context/AuthContext';
+import React, { useCallback, useState } from 'react';
+import { Alert, Box, Button, Container, Fade, Paper, TextField, Typography, useTheme } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
+
+import { ANIMATION_DURATION_FAST, ANIMATION_DURATION_NORMAL } from '../../constants';
+import { useAuth } from '../../context/AuthContext';
 import { logger } from '../../utils/logger';
+import { textFieldStyles } from '../../utils/styleUtils';
 
 export const LoginForm: React.FC = () => {
   const [username, setUsername] = useState('');
@@ -23,22 +16,28 @@ export const LoginForm: React.FC = () => {
   const navigate = useNavigate();
   const theme = useTheme();
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    setLoading(true);
+  const handleSubmit = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault();
+      setError('');
+      setLoading(true);
 
-    try {
-      await login(username, password);
-      navigate('/dashboard');
-    } catch (err: unknown) {
-      logger.error('Login form error:', err);
-      const errorMessage = (err as Error).message || (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'Login failed. Please check your credentials.';
-      setError(errorMessage);
-    } finally {
-      setLoading(false);
-    }
-  };
+      try {
+        await login(username, password);
+        navigate('/dashboard');
+      } catch (err: unknown) {
+        logger.error('Login form error:', err);
+        const errorMessage =
+          (err as Error).message ||
+          (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ||
+          'Login failed. Please check your credentials.';
+        setError(errorMessage);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [username, password, login, navigate]
+  );
 
   return (
     <Container maxWidth="sm">
@@ -52,7 +51,7 @@ export const LoginForm: React.FC = () => {
           padding: { xs: 2, sm: 3 },
         }}
       >
-        <Fade in timeout={600}>
+        <Fade in timeout={ANIMATION_DURATION_NORMAL}>
           <Paper
             elevation={8}
             sx={{
@@ -72,7 +71,7 @@ export const LoginForm: React.FC = () => {
                 variant="h4"
                 gutterBottom
                 sx={{
-                  fontWeight: 600,
+                  fontWeight: theme.typography.h4.fontWeight,
                   background: `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.secondary.main} 100%)`,
                   backgroundClip: 'text',
                   WebkitBackgroundClip: 'text',
@@ -85,14 +84,14 @@ export const LoginForm: React.FC = () => {
               <Typography
                 variant="body2"
                 color="text.secondary"
-                sx={{ fontSize: '0.95rem' }}
+                sx={{ fontSize: theme.typography.body2.fontSize }}
               >
                 Sign in to continue
               </Typography>
             </Box>
 
             {error && (
-              <Fade in timeout={300}>
+              <Fade in timeout={ANIMATION_DURATION_FAST}>
                 <Alert
                   severity="error"
                   sx={{
@@ -123,18 +122,7 @@ export const LoginForm: React.FC = () => {
                 autoFocus
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                sx={{
-                  mb: 2,
-                  '& .MuiOutlinedInput-root': {
-                    transition: 'all 0.2s ease-in-out',
-                    '&:hover': {
-                      transform: 'translateY(-1px)',
-                    },
-                    '&.Mui-focused': {
-                      transform: 'translateY(-1px)',
-                    },
-                  },
-                }}
+                sx={{ mb: 2, ...textFieldStyles }}
               />
               <TextField
                 margin="normal"
@@ -147,18 +135,7 @@ export const LoginForm: React.FC = () => {
                 autoComplete="current-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                sx={{
-                  mb: 3,
-                  '& .MuiOutlinedInput-root': {
-                    transition: 'all 0.2s ease-in-out',
-                    '&:hover': {
-                      transform: 'translateY(-1px)',
-                    },
-                    '&.Mui-focused': {
-                      transform: 'translateY(-1px)',
-                    },
-                  },
-                }}
+                sx={{ mb: 3, ...textFieldStyles }}
               />
               <Button
                 type="submit"
@@ -167,8 +144,8 @@ export const LoginForm: React.FC = () => {
                 disabled={loading}
                 sx={{
                   py: 1.5,
-                  fontSize: '1rem',
-                  fontWeight: 600,
+                  fontSize: theme.typography.body1.fontSize,
+                  fontWeight: theme.typography.h5.fontWeight,
                   background: `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.secondary.main} 100%)`,
                   '&:hover': {
                     background: `linear-gradient(135deg, ${theme.palette.primary.dark} 0%, ${theme.palette.secondary.dark} 100%)`,

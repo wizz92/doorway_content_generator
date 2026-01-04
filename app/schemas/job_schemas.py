@@ -1,6 +1,8 @@
 """Job-related schemas."""
-from typing import List, Optional, Dict, Any
+import json
 from datetime import datetime
+from typing import Any, Dict, List, Optional
+
 from pydantic import BaseModel, Field
 
 from app.database import Job
@@ -98,48 +100,98 @@ class JobResponse(BaseModel):
             return {}
         
         num_websites = job.num_websites or 0
+        completed_keywords = JobResponse._parse_completed_keywords(job.completed_keywords)
         
-        # Normalize completed_keywords - handle JSON deserialization
-        # SQLite may store JSON as TEXT, so we need to handle both dict and string
-        import json
-        completed_keywords = job.completed_keywords
-        if completed_keywords is None:
-            completed_keywords = {}
-        elif isinstance(completed_keywords, str):
-            # Try to parse JSON string
-            try:
-                parsed = json.loads(completed_keywords)
-                completed_keywords = parsed if isinstance(parsed, dict) else {}
-            except (json.JSONDecodeError, TypeError):
-                completed_keywords = {}
-        elif not isinstance(completed_keywords, dict):
-            completed_keywords = {}
-        
-        # If job is completed but completed_keywords is empty, assume all keywords are completed for all websites
-        # This handles legacy jobs created before checkpointing was implemented
+        # If job is completed but completed_keywords is empty, assume all keywords are completed
         if job.status == "completed" and (not completed_keywords or len(completed_keywords) == 0):
-            all_websites = list(range(1, num_websites + 1))
-            return {keyword: {"completed_websites": all_websites, "total_websites": num_websites} for keyword in job.keywords}
+            return JobResponse._create_all_completed_status(job.keywords, num_websites)
         
         keyword_status = {}
-        
         for keyword in job.keywords:
-            completed_websites = []
-            
-            # Check each website index (1-based)
-            for website_index in range(1, num_websites + 1):
-                website_key = str(website_index)
-                if website_key in completed_keywords:
-                    completed_list = completed_keywords[website_key]
-                    if isinstance(completed_list, list) and keyword in completed_list:
-                        completed_websites.append(website_index)
-            
-            keyword_status[keyword] = {
-                "completed_websites": completed_websites,
-                "total_websites": num_websites
-            }
+            keyword_status[keyword] = JobResponse._calculate_single_keyword_status(
+                keyword, completed_keywords, num_websites
+            )
         
         return keyword_status
+    
+    @staticmethod
+    def _parse_completed_keywords(completed_keywords: Any) -> Dict[str, list]:
+        """
+        Parse completed_keywords from various formats (dict, string, None).
+        
+        Args:
+            completed_keywords: Completed keywords data (may be dict, string, or None)
+            
+        Returns:
+            Dictionary mapping website index to list of completed keywords
+        """
+        if completed_keywords is None:
+            return {}
+        
+        if isinstance(completed_keywords, str):
+            try:
+                parsed = json.loads(completed_keywords)
+                return parsed if isinstance(parsed, dict) else {}
+            except (json.JSONDecodeError, TypeError):
+                return {}
+        
+        if isinstance(completed_keywords, dict):
+            return completed_keywords
+        
+        return {}
+    
+    @staticmethod
+    def _create_all_completed_status(keywords: List[str], num_websites: int) -> Dict[str, Dict[str, Any]]:
+        """
+        Create status dict assuming all keywords are completed for all websites.
+        
+        Args:
+            keywords: List of keywords
+            num_websites: Number of websites
+            
+        Returns:
+            Dictionary with all keywords marked as completed for all websites
+        """
+        all_websites = list(range(1, num_websites + 1))
+        return {
+            keyword: {
+                "completed_websites": all_websites,
+                "total_websites": num_websites
+            }
+            for keyword in keywords
+        }
+    
+    @staticmethod
+    def _calculate_single_keyword_status(
+        keyword: str,
+        completed_keywords: Dict[str, list],
+        num_websites: int
+    ) -> Dict[str, Any]:
+        """
+        Calculate completion status for a single keyword.
+        
+        Args:
+            keyword: Keyword to check
+            completed_keywords: Dictionary mapping website index to completed keywords
+            num_websites: Total number of websites
+            
+        Returns:
+            Dictionary with completed_websites and total_websites
+        """
+        completed_websites = []
+        
+        # Check each website index (1-based)
+        for website_index in range(1, num_websites + 1):
+            website_key = str(website_index)
+            if website_key in completed_keywords:
+                completed_list = completed_keywords[website_key]
+                if isinstance(completed_list, list) and keyword in completed_list:
+                    completed_websites.append(website_index)
+        
+        return {
+            "completed_websites": completed_websites,
+            "total_websites": num_websites
+        }
 
 
 class JobListResponse(BaseModel):

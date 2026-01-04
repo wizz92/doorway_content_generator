@@ -1,7 +1,9 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { jobsService, Job } from '../services/jobs';
+import { useCallback, useEffect, useRef, useState } from 'react';
+
 import { useError } from '../context/ErrorContext';
+import { jobsService, Job } from '../services/jobs';
 import { logger } from '../utils/logger';
+import { DEFAULT_JOB_LIST_LIMIT } from '../constants';
 
 interface UseJobsReturn {
   jobs: Job[];
@@ -14,7 +16,7 @@ interface UseJobsReturn {
 /**
  * Hook for managing job list.
  */
-export function useJobs(limit: number = 50): UseJobsReturn {
+export function useJobs(limit: number = DEFAULT_JOB_LIST_LIMIT): UseJobsReturn {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

@@ -1,13 +1,13 @@
 """Logging API endpoints."""
-from fastapi import APIRouter, Depends, Query, HTTPException, status
-from sqlalchemy.orm import Session
 from typing import Optional
-from datetime import datetime, timedelta
 
-from app.database import get_db
-from app.models.log import ApiLog, JobLog
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+
+from app.dependencies import get_log_repository
 from app.middleware.auth import get_current_user
 from app.models.user import User
+from app.repositories.log_repository import LogRepository
+from app.utils.responses import success_response
 
 router = APIRouter()
 
@@ -20,48 +20,24 @@ async def get_api_logs(
     method: Optional[str] = None,
     status_code: Optional[int] = None,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    log_repository: LogRepository = Depends(get_log_repository)
 ):
     """
     Get API logs (only for authenticated users).
+    
+    Returns:
+        Standardized response with API logs data
     """
-    query = db.query(ApiLog)
+    result = log_repository.get_api_logs(
+        user_id=current_user.id,
+        limit=limit,
+        offset=offset,
+        endpoint=endpoint,
+        method=method,
+        status_code=status_code
+    )
     
-    # Filter by current user (users can only see their own logs)
-    query = query.filter(ApiLog.user_id == current_user.id)
-    
-    # Apply filters
-    if endpoint:
-        query = query.filter(ApiLog.endpoint.contains(endpoint))
-    if method:
-        query = query.filter(ApiLog.method == method)
-    if status_code:
-        query = query.filter(ApiLog.status_code == status_code)
-    
-    # Order by timestamp desc
-    query = query.order_by(ApiLog.timestamp.desc())
-    
-    # Paginate
-    total = query.count()
-    logs = query.offset(offset).limit(limit).all()
-    
-    return {
-        "total": total,
-        "limit": limit,
-        "offset": offset,
-        "logs": [
-            {
-                "id": log.id,
-                "endpoint": log.endpoint,
-                "method": log.method,
-                "status_code": log.status_code,
-                "timestamp": log.timestamp.isoformat() if log.timestamp else None,
-                "request_data": log.request_data,
-                "response_data": log.response_data
-            }
-            for log in logs
-        ]
-    }
+    return success_response(data=result, message="API logs retrieved successfully")
 
 
 @router.get("/jobs")  # This becomes /api/logs/jobs (NOT /api/jobs) due to router prefix

@@ -11,12 +11,15 @@ from app.api.auth import router as auth_router
 from app.api.logs import router as logs_router
 from app.middleware.logging import LoggingMiddleware
 from app.config import settings
-from app.exceptions import AppException
+from app.exceptions import AppException, JobNotFoundError, JobAccessDeniedError, JobInvalidStateError
 from app.exceptions.handlers import (
     app_exception_handler,
     validation_exception_handler,
     database_exception_handler,
     generic_exception_handler,
+    job_not_found_handler,
+    job_access_denied_handler,
+    job_invalid_state_handler,
 )
 
 app = FastAPI(
@@ -40,6 +43,11 @@ if settings.enable_api_logging:
     app.add_middleware(LoggingMiddleware)
 
 # Register exception handlers
+# Specific job exception handlers (registered before generic AppException handler)
+app.add_exception_handler(JobNotFoundError, job_not_found_handler)
+app.add_exception_handler(JobAccessDeniedError, job_access_denied_handler)
+app.add_exception_handler(JobInvalidStateError, job_invalid_state_handler)
+# Generic exception handlers
 app.add_exception_handler(AppException, app_exception_handler)
 app.add_exception_handler(RequestValidationError, validation_exception_handler)
 app.add_exception_handler(SQLAlchemyError, database_exception_handler)

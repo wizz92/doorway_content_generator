@@ -1,12 +1,8 @@
 import api from './api';
-import { normalizeJobs } from '../utils/jobUtils';
+
 import { logger } from '../utils/logger';
-import { 
-  Job, 
-  JobStatus, 
-  UploadResponse, 
-  GenerateRequest 
-} from '../types/job';
+import { GenerateRequest, Job, JobStatus, UploadResponse } from '../types/job';
+import { normalizeJobs } from '../utils/jobUtils';
 
 export interface JobStatusResponse {
   id: string;

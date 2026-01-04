@@ -1,6 +1,7 @@
 import React from 'react';
-import { Alert, AlertTitle, useTheme } from '@mui/material';
-import { Fade } from '@mui/material';
+import { Alert, AlertTitle, Fade } from '@mui/material';
+
+import { ANIMATION_DURATION_FAST } from '../../constants';
 
 interface ErrorAlertProps {
   message: string;
@@ -8,9 +9,8 @@ interface ErrorAlertProps {
 }
 
 export const ErrorAlert: React.FC<ErrorAlertProps> = ({ message, title = 'Error' }) => {
-  const theme = useTheme();
   return (
-    <Fade in timeout={300}>
+    <Fade in timeout={ANIMATION_DURATION_FAST}>
       <Alert
         severity="error"
         sx={{
@@ -24,7 +24,7 @@ export const ErrorAlert: React.FC<ErrorAlertProps> = ({ message, title = 'Error'
           },
         }}
       >
-        <AlertTitle sx={{ fontWeight: 600 }}>{title}</AlertTitle>
+        <AlertTitle>{title}</AlertTitle>
         {message}
       </Alert>
     </Fade>

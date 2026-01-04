@@ -1,5 +1,7 @@
 import { useEffect, useRef } from 'react';
 
+import { JOB_POLLING_INTERVAL } from '../constants';
+
 interface UseJobPollingOptions {
   enabled?: boolean;
   interval?: number;
@@ -13,7 +15,7 @@ export function useJobPolling(
   callback: () => void,
   options: UseJobPollingOptions = {}
 ): void {
-  const { enabled = true, interval = 2000, onPoll } = options;
+  const { enabled = true, interval = JOB_POLLING_INTERVAL, onPoll } = options;
   const callbackRef = useRef(callback);
 
   // Update callback ref when it changes

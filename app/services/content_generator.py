@@ -1,7 +1,8 @@
 """Content generation service."""
-from typing import List, Dict
-from app.services.openrouter_client import OpenRouterClient
+from typing import Dict, List
+
 from app.config import settings
+from app.services.openrouter_client import OpenRouterClient
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)

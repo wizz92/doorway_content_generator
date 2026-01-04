@@ -1,7 +1,9 @@
 """OpenRouter API client."""
+import re
 import time
-import requests
 from typing import Optional
+
+import requests
 
 from app.config import settings
 from app.utils.logger import get_logger
@@ -53,21 +55,60 @@ class OpenRouterClient:
             Exception: If content generation fails after retries
         """
         model_to_use = model or self.model
-        
         url = f"{self.base_url}/chat/completions"
+        headers = self._build_headers()
+        payload = self._build_request_payload(keyword, lang, geo, website_index, model_to_use)
         
-        headers = {
+        logger.debug(f"Generating content for keyword '{keyword}' using model '{model_to_use}'")
+        
+        content = self._execute_with_retry(url, headers, payload, keyword, max_retries)
+        processed_content = self._process_content(content)
+        
+        # Add delay to respect rate limits
+        time.sleep(self.request_delay)
+        
+        logger.debug(f"Successfully generated content for keyword '{keyword}'")
+        return processed_content
+    
+    def _build_headers(self) -> dict:
+        """
+        Build HTTP headers for API request.
+        
+        Returns:
+            Dictionary of HTTP headers
+        """
+        return {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
         }
+    
+    def _build_request_payload(
+        self,
+        keyword: str,
+        lang: str,
+        geo: str,
+        website_index: int,
+        model: str
+    ) -> dict:
+        """
+        Build request payload for content generation.
         
+        Args:
+            keyword: Keyword to generate content for
+            lang: Language code
+            geo: Geography code
+            website_index: Index of website (for variation)
+            model: Model to use
+            
+        Returns:
+            Request payload dictionary
+        """
         system_prompt = (
             "You are an expert SEO and web content writer. "
             "Always follow the user instructions exactly, especially about language, length limits, and HTML-only output. "
             "Never use Markdown or any formatting outside the allowed HTML tags when the user requests it."
         )
         
-        # Create variation based on website index
         variation_instruction = self._get_variation_instruction(website_index)
         
         user_prompt = (
@@ -90,17 +131,38 @@ class OpenRouterClient:
             "- Include one <ul> list with several <li> items related to the keyword.\n"
         )
         
-        payload = {
-            "model": model_to_use,
+        return {
+            "model": model,
             "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
         }
+    
+    def _execute_with_retry(
+        self,
+        url: str,
+        headers: dict,
+        payload: dict,
+        keyword: str,
+        max_retries: int
+    ) -> str:
+        """
+        Execute API request with retry logic.
         
-        logger.debug(f"Generating content for keyword '{keyword}' using model '{model_to_use}'")
-        
-        # Retry logic
+        Args:
+            url: API endpoint URL
+            headers: HTTP headers
+            payload: Request payload
+            keyword: Keyword for logging
+            max_retries: Maximum number of retry attempts
+            
+        Returns:
+            Generated content
+            
+        Raises:
+            Exception: If all retries fail
+        """
         last_error = None
         for attempt in range(max_retries):
             try:
@@ -108,48 +170,20 @@ class OpenRouterClient:
                 resp.raise_for_status()
                 data = resp.json()
                 
-                # Validate response structure
-                if "choices" not in data or not data["choices"]:
-                    raise ValueError("Invalid response: no choices in response")
-                
-                if "message" not in data["choices"][0] or "content" not in data["choices"][0]["message"]:
-                    raise ValueError("Invalid response: no content in message")
-                
-                content = data["choices"][0]["message"]["content"]
-                
-                if not content or not content.strip():
-                    raise ValueError("Empty content received from API")
-                
-                # Remove line breaks from content
-                import re
-                content = re.sub(r'[\r\n]+', '', content.strip())
-                
-                # Add delay to respect rate limits
-                time.sleep(self.request_delay)
-                
-                logger.debug(f"Successfully generated content for keyword '{keyword}'")
+                content = self._validate_response(data, keyword)
                 return content
                 
             except requests.exceptions.Timeout:
                 last_error = f"Request timeout (attempt {attempt + 1}/{max_retries})"
                 logger.warning(f"Request timeout for keyword '{keyword}': {last_error}")
                 if attempt < max_retries - 1:
-                    time.sleep(2 ** attempt)  # Exponential backoff
+                    time.sleep(2 ** attempt)
                     continue
             except requests.exceptions.HTTPError as e:
-                if e.response and e.response.status_code == 429:  # Rate limit
-                    last_error = f"Rate limit exceeded (attempt {attempt + 1}/{max_retries})"
-                    logger.warning(f"Rate limit for keyword '{keyword}': {last_error}")
-                    if attempt < max_retries - 1:
-                        wait_time = (2 ** attempt) * 5  # Longer wait for rate limits
-                        time.sleep(wait_time)
-                        continue
-                else:
-                    last_error = f"HTTP error {e.response.status_code if e.response else 'unknown'}: {str(e)}"
-                    logger.error(f"HTTP error for keyword '{keyword}': {last_error}")
-                    if attempt < max_retries - 1:
-                        time.sleep(2 ** attempt)
-                        continue
+                last_error = self._handle_http_error(e, keyword, attempt, max_retries)
+                if last_error is None:  # Should continue retrying
+                    continue
+                break
             except requests.exceptions.RequestException as e:
                 last_error = f"Request error: {str(e)}"
                 logger.error(f"Request error for keyword '{keyword}': {last_error}", exc_info=True)
@@ -171,6 +205,81 @@ class OpenRouterClient:
         error_msg = f"Failed to generate content after {max_retries} attempts. Last error: {last_error}"
         logger.error(f"Content generation failed for keyword '{keyword}': {error_msg}")
         raise Exception(error_msg)
+    
+    def _validate_response(self, data: dict, keyword: str) -> str:
+        """
+        Validate API response structure and extract content.
+        
+        Args:
+            data: Response JSON data
+            keyword: Keyword for logging
+            
+        Returns:
+            Extracted content string
+            
+        Raises:
+            ValueError: If response structure is invalid
+        """
+        if "choices" not in data or not data["choices"]:
+            raise ValueError("Invalid response: no choices in response")
+        
+        if "message" not in data["choices"][0] or "content" not in data["choices"][0]["message"]:
+            raise ValueError("Invalid response: no content in message")
+        
+        content = data["choices"][0]["message"]["content"]
+        
+        if not content or not content.strip():
+            raise ValueError("Empty content received from API")
+        
+        return content
+    
+    def _handle_http_error(
+        self,
+        e: requests.exceptions.HTTPError,
+        keyword: str,
+        attempt: int,
+        max_retries: int
+    ) -> Optional[str]:
+        """
+        Handle HTTP errors with appropriate retry logic.
+        
+        Args:
+            e: HTTP error exception
+            keyword: Keyword for logging
+            attempt: Current attempt number
+            max_retries: Maximum number of retries
+            
+        Returns:
+            Error message if should stop retrying, None if should continue
+        """
+        if e.response and e.response.status_code == 429:  # Rate limit
+            last_error = f"Rate limit exceeded (attempt {attempt + 1}/{max_retries})"
+            logger.warning(f"Rate limit for keyword '{keyword}': {last_error}")
+            if attempt < max_retries - 1:
+                wait_time = (2 ** attempt) * 5  # Longer wait for rate limits
+                time.sleep(wait_time)
+                return None
+            return last_error
+        else:
+            last_error = f"HTTP error {e.response.status_code if e.response else 'unknown'}: {str(e)}"
+            logger.error(f"HTTP error for keyword '{keyword}': {last_error}")
+            if attempt < max_retries - 1:
+                time.sleep(2 ** attempt)
+                return None
+            return last_error
+    
+    def _process_content(self, content: str) -> str:
+        """
+        Process and clean generated content.
+        
+        Args:
+            content: Raw content from API
+            
+        Returns:
+            Processed content string
+        """
+        # Remove line breaks from content
+        return re.sub(r'[\r\n]+', '', content.strip())
     
     def _get_variation_instruction(self, website_index: int) -> str:
         """Get variation instruction based on website index."""

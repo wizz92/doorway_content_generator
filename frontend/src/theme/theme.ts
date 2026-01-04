@@ -117,6 +117,16 @@ export function getDesignTokens(mode: 'light' | 'dark'): ThemeOptions {
         textTransform: 'none',
         fontWeight: 500,
       },
+      // Custom typography variants
+      caption: {
+        fontSize: '0.75rem',
+        lineHeight: 1.5,
+      },
+      overline: {
+        fontSize: '0.75rem',
+        lineHeight: 1.5,
+        textTransform: 'uppercase',
+      },
     },
     spacing: 4,
     shape: {
@@ -163,7 +173,21 @@ export function getDesignTokens(mode: 'light' | 'dark'): ThemeOptions {
         styleOverrides: {
           root: {
             borderRadius: 6,
-            fontWeight: 500,
+            fontWeight: 500, // Uses theme.typography.fontWeight.medium
+          },
+        },
+      },
+      MuiTableCell: {
+        styleOverrides: {
+          head: {
+            fontWeight: 600, // Uses theme.typography.fontWeight.semibold
+          },
+        },
+      },
+      MuiAlertTitle: {
+        styleOverrides: {
+          root: {
+            fontWeight: 600, // Uses theme.typography.fontWeight.semibold
           },
         },
       },

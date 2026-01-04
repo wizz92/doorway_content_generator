@@ -1,23 +1,25 @@
 import React from 'react';
 import { Typography, Box, Paper, useTheme } from '@mui/material';
 import { Inbox } from '@mui/icons-material';
+
 import { JobCard } from './JobCard';
 import { LoadingSpinner } from '../Common/LoadingSpinner';
 import { useJobs } from '../../hooks/useJobs';
 import { useJobPolling } from '../../hooks/useJobPolling';
+import { DEFAULT_JOB_LIST_LIMIT, JOB_POLLING_INTERVAL } from '../../constants';
 
 interface JobListProps {
   refreshTrigger?: number;
 }
 
 export const JobList: React.FC<JobListProps> = ({ refreshTrigger }) => {
-  const { jobs, loading, fetchJobs } = useJobs(50);
+  const { jobs, loading, fetchJobs } = useJobs(DEFAULT_JOB_LIST_LIMIT);
   const theme = useTheme();
 
   // Poll for job updates
   useJobPolling(fetchJobs, {
     enabled: true,
-    interval: 2000,
+    interval: JOB_POLLING_INTERVAL,
   });
 
   // Refresh when trigger changes
@@ -37,9 +39,9 @@ export const JobList: React.FC<JobListProps> = ({ refreshTrigger }) => {
         variant="h5"
         gutterBottom
         sx={{
-          fontWeight: 600,
+          fontWeight: theme.typography.h5.fontWeight,
           mb: 3,
-          fontSize: { xs: '1.5rem', sm: '1.75rem' },
+          fontSize: { xs: theme.typography.h6.fontSize, sm: theme.typography.h5.fontSize },
         }}
       >
         Your Jobs
@@ -65,7 +67,7 @@ export const JobList: React.FC<JobListProps> = ({ refreshTrigger }) => {
           <Typography
             variant="h6"
             color="text.secondary"
-            sx={{ mb: 1, fontWeight: 500 }}
+            sx={{ mb: 1, fontWeight: theme.typography.button.fontWeight }}
           >
             No jobs yet
           </Typography>

@@ -1,19 +1,16 @@
 """API routes."""
 from typing import Any, Dict, List
 
-from fastapi import APIRouter, UploadFile, File, Depends, BackgroundTasks, Query, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Query, Response, UploadFile
 from fastapi.responses import StreamingResponse
-from sqlalchemy.orm import Session
 
 from app.constants import DEFAULT_JOB_LIST_LIMIT, MAX_JOB_LIST_LIMIT
-from app.database import get_db
-from app.exceptions import JobNotFoundError, JobAccessDeniedError, JobInvalidStateError
+from app.dependencies import get_job_service
 from app.middleware.auth import get_current_user
 from app.models.user import User
-from app.schemas import GenerateRequest, JobStatusResponse, JobResponse, JobListResponse
-from app.services.file_processor import extract_keywords_from_csv, get_csv_preview, FileProcessingError
+from app.schemas import GenerateRequest, JobListResponse, JobResponse, JobStatusResponse
+from app.services.file_processor import FileProcessingError, extract_keywords_from_csv, get_csv_preview
 from app.services.job_service import JobService
-from app.services.queue import create_queue_service
 from app.utils.logger import get_logger
 from app.utils.responses import success_response
 
@@ -74,30 +71,12 @@ def _convert_jobs_to_dict(jobs: List[JobResponse]) -> List[Dict[str, Any]]:
     return jobs_dict
 
 
-def get_job_service(
-    background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db)
-) -> JobService:
-    """
-    Dependency to get JobService instance.
-    
-    Args:
-        background_tasks: FastAPI BackgroundTasks
-        db: Database session
-        
-    Returns:
-        JobService instance
-    """
-    queue = create_queue_service(background_tasks)
-    return JobService(db, queue)
-
-
 @router.post("/upload")
 async def upload_csv(
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-    background_tasks: BackgroundTasks = BackgroundTasks()
+    background_tasks: BackgroundTasks = BackgroundTasks(),
+    job_service: JobService = Depends(get_job_service)
 ) -> Dict[str, Any]:
     """
     Upload CSV file with keywords.
@@ -108,8 +87,7 @@ async def upload_csv(
         # Extract keywords
         keywords = extract_keywords_from_csv(file, "keyword")
         
-        # Create job service and create job
-        job_service = get_job_service(background_tasks, db)
+        # Create job
         job = job_service.create_job(current_user.id, keywords)
         
         return success_response(
@@ -154,16 +132,15 @@ async def preview_csv(file: UploadFile = File(...)) -> Dict[str, Any]:
 @router.post("/generate")
 async def generate_content(
     request: GenerateRequest,
-    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    background_tasks: BackgroundTasks = BackgroundTasks(),
+    job_service: JobService = Depends(get_job_service)
 ):
     """
     Start content generation for a job.
     
     Returns job status.
     """
-    job_service = get_job_service(background_tasks, db)
     return job_service.start_generation(request, current_user.id)
 
 
@@ -171,13 +148,12 @@ async def generate_content(
 async def get_job_status(
     job_id: str,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-    background_tasks: BackgroundTasks = BackgroundTasks()
+    background_tasks: BackgroundTasks = BackgroundTasks(),
+    job_service: JobService = Depends(get_job_service)
 ):
     """
     Get status of a job.
     """
-    job_service = get_job_service(background_tasks, db)
     return job_service.get_job_status(job_id, current_user.id)
 
 
@@ -185,13 +161,12 @@ async def get_job_status(
 async def download_job_results(
     job_id: str,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-    background_tasks: BackgroundTasks = BackgroundTasks()
+    background_tasks: BackgroundTasks = BackgroundTasks(),
+    job_service: JobService = Depends(get_job_service)
 ):
     """
     Download generated content files as ZIP archive.
     """
-    job_service = get_job_service(background_tasks, db)
     zip_content = job_service.download_results(job_id, current_user.id)
     
     # Return as streaming response
@@ -208,9 +183,9 @@ async def download_job_results(
 async def list_jobs(
     limit: int = Query(DEFAULT_JOB_LIST_LIMIT, ge=1, le=MAX_JOB_LIST_LIMIT),
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
     background_tasks: BackgroundTasks = BackgroundTasks(),
-    response: Response = None
+    response: Response = None,
+    job_service: JobService = Depends(get_job_service)
 ):
     """
     List recent jobs for current user.
@@ -222,7 +197,6 @@ async def list_jobs(
     
     _set_no_cache_headers(response)
     
-    job_service = get_job_service(background_tasks, db)
     jobs = job_service.list_jobs(current_user.id, limit)
     
     _validate_jobs_response(jobs)
@@ -236,13 +210,12 @@ async def list_jobs(
 async def cancel_job(
     job_id: str,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-    background_tasks: BackgroundTasks = BackgroundTasks()
+    background_tasks: BackgroundTasks = BackgroundTasks(),
+    job_service: JobService = Depends(get_job_service)
 ):
     """
     Cancel a job (if queued or processing).
     """
-    job_service = get_job_service(background_tasks, db)
     job_service.cancel_job(job_id, current_user.id)
     return success_response(data=None, message="Job cancelled")
 
@@ -251,13 +224,12 @@ async def cancel_job(
 async def resume_job(
     job_id: str,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-    background_tasks: BackgroundTasks = BackgroundTasks()
+    background_tasks: BackgroundTasks = BackgroundTasks(),
+    job_service: JobService = Depends(get_job_service)
 ):
     """
     Resume a failed or interrupted job from the last checkpoint.
     """
-    job_service = get_job_service(background_tasks, db)
     result = job_service.resume_job(job_id, current_user.id)
     return success_response(
         data=result,

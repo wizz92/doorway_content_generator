@@ -1,19 +1,20 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import {
   AppBar as MuiAppBar,
-  Toolbar,
-  Typography,
-  Button,
   Box,
+  Button,
+  IconButton,
   Menu,
   MenuItem,
-  IconButton,
-  useTheme,
+  Toolbar,
+  Typography,
   useMediaQuery,
+  useTheme,
 } from '@mui/material';
 import { AccountCircle, Brightness4, Brightness7 } from '@mui/icons-material';
-import { useAuth } from '../../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
+
+import { useAuth } from '../../context/AuthContext';
 import { useThemeContext } from '../Theme/ThemeProvider';
 
 export const AppBar: React.FC = () => {
@@ -24,19 +25,19 @@ export const AppBar: React.FC = () => {
   const { mode, toggleColorMode } = useThemeContext();
   const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
 
-  const handleMenu = (event: React.MouseEvent<HTMLElement>) => {
+  const handleMenu = useCallback((event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);
-  };
+  }, []);
 
-  const handleClose = () => {
+  const handleClose = useCallback(() => {
     setAnchorEl(null);
-  };
+  }, []);
 
-  const handleLogout = async () => {
+  const handleLogout = useCallback(async () => {
     await logout();
     navigate('/login');
     handleClose();
-  };
+  }, [logout, navigate, handleClose]);
 
   return (
     <MuiAppBar 
@@ -52,7 +53,7 @@ export const AppBar: React.FC = () => {
           component="div" 
           sx={{ 
             flexGrow: 1,
-            fontWeight: 600,
+            fontWeight: theme.typography.h6.fontWeight,
             letterSpacing: 0.5,
           }}
         >

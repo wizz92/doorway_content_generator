@@ -1,10 +1,10 @@
 """Job logging service."""
-import os
-from typing import Optional, Dict, Any
+from typing import Any, Dict, Optional
+
 from sqlalchemy.orm import Session
 
-from app.models.log import JobLog
 from app.config import settings
+from app.models.log import JobLog
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
